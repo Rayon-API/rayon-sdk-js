@@ -26,6 +26,8 @@ Do not publish the same version again. The initial authenticated publication est
 
 After the package exists, open its npm settings and add a GitHub Actions trusted publisher with the exact owner, repository, workflow, and environment values above. Allow the publisher to publish packages. Configure the GitHub `npm` environment and any desired required reviewers. See [npm's trusted publishing documentation](https://docs.npmjs.com/trusted-publishers/).
 
+Create the trusted publisher when the next release is ready: npm requires its first successful publish within two days to validate the repository identity. If it expires, recreate the configuration before releasing.
+
 The workflow runs on GitHub-hosted runners using Node.js 24 and verifies npm is at least 11.5.1. Its publish job has `id-token: write`, uses the `npm` environment, and calls npm directly without a stored npm token. Trusted publishing supplies OIDC authentication and provenance. Match the npm configuration to the workflow identity exactly.
 
 For a later release, update `package.json` and `package-lock.json` to the same new version, commit the reviewed changes, tag that commit `v<version>`, and create a GitHub release for that tag. Publishing the release triggers tests, both builds, the tarball audit, import/type checks, and tag/version validation before `npm publish --access public`.

@@ -2,9 +2,7 @@
 
 A small server-side JavaScript and TypeScript client for Rayon API. Requires Node.js **20.18.1 or newer** and uses Undici. ESM, CommonJS, and TypeScript declarations are included. Keep API keys on your server.
 
-Version **0.1.0** is prepared for publication. Registry availability is not assumed; see [RELEASE.md](RELEASE.md) for the first-publication steps.
-
-Install after npm publication:
+Install from npm:
 
 ```sh
 npm install rayon-sdk-js
