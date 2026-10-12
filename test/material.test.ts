@@ -339,3 +339,120 @@ for (const change of [
   test("enforces exact gateway limits", async () => {
     await assert.rejects(generate(shape(change), key), errorKind("validation"));
   });
+for (const field of [
+  "screenX",
+  "screenY",
+  "screenLeft",
+  "screenTop",
+  "pageXOffset",
+  "pageYOffset",
+])
+  for (const value of [-2147483649, 2147483648])
+    test("rejects signed int32 coordinate overflow", async () => {
+      await assert.rejects(
+        generate(shape({ profile: { window: { [field]: value } } }), key),
+        errorKind("validation"),
+      );
+    });
+for (const change of [
+  { material_ref: null, material_expires_at: null },
+  { material_ref: null },
+  { material_expires_at: null },
+])
+  test("requires nonnull material metadata", async () => {
+    reply(result(change));
+    await assert.rejects(generate(shape(), key), errorKind("invalid_response"));
+  });
+for (const fields of [
+  ["material_ref"],
+  ["material_expires_at"],
+  ["material_ref", "material_expires_at"],
+])
+  test("requires present material metadata", async () => {
+    const value = result();
+    for (const f of fields) delete value[f];
+    reply(value);
+    await assert.rejects(generate(shape(), key), errorKind("invalid_response"));
+  });
+for (const [prefix, value] of [
+  ["p".repeat(129), "valid"],
+  ["valid", "é"],
+  ["valid", "a b"],
+])
+  test("requires bounded prefix and visible ASCII headers", async () => {
+    reply(
+      result({
+        headers: Object.fromEntries(
+          [..."abcdfz"].map((s) => [`${prefix}-${s}`, s === "d" ? "" : value]),
+        ),
+      }),
+    );
+    await assert.rejects(generate(shape(), key), errorKind("invalid_response"));
+  });
+test("effective profile limit includes alias expansion and defaults", async () => {
+  await assert.rejects(
+    generate(
+      shape({
+        profile: {
+          user_agent: "u".repeat(8192),
+          platform: "p".repeat(8192),
+          language: "l".repeat(8192),
+          languages: ["a".repeat(8192), "b".repeat(8192), "c".repeat(8192)],
+        },
+      }),
+      key,
+    ),
+    errorKind("validation"),
+  );
+});
+test("accepts UTF8 profile with unicode vendor and appName", async () => {
+  reply();
+  await generate(
+    shape({
+      profile: {
+        navigator: { vendor: "é".repeat(8192), appName: "é".repeat(8192) },
+      },
+    }),
+    key,
+  );
+});
+test("shared canonical profile fixtures match public request validation", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const fixture = JSON.parse(
+    await readFile(
+      new URL("./fixtures/profile-contract.json", import.meta.url),
+      "utf8",
+    ),
+  );
+  function expand(value: any): any {
+    if (value && typeof value === "object" && value.$repeat)
+      return value.$repeat.text.repeat(value.$repeat.count);
+    if (Array.isArray(value)) return value.map(expand);
+    if (value && typeof value === "object")
+      return Object.fromEntries(
+        Object.entries(value).map(([k, v]) => [k, expand(v)]),
+      );
+    return value;
+  }
+  for (const c of fixture.cases) {
+    if (c.valid) {
+      reply();
+      await generate(shape({ profile: expand(c.profile) }), key);
+    } else
+      await assert.rejects(
+        generate(shape({ profile: expand(c.profile) }), key),
+        errorKind("validation"),
+      );
+  }
+});
+for (const prefix of ["ee30zvqlwf", "p".repeat(128), "!#$%&'*+-.^_`|~"])
+  test("preserves actual HTTP token prefix at maximum length", async () => {
+    const headers = Object.fromEntries(
+      [..."abcdfz"].map((s) => [
+        `${prefix}-${s}`,
+        s === "d" ? "" : "visible-value",
+      ]),
+    );
+    reply(result({ headers }));
+    assert.deepEqual({ ...(await generate(shape(), key)).headers }, headers);
+  });

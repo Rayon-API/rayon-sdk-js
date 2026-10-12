@@ -81,8 +81,8 @@ export interface ShapeResult {
   request_id: string;
   generation_ms: number;
   profile_used: BrowserProfile;
-  material_ref?: string;
-  material_expires_at?: string;
+  material_ref: string;
+  material_expires_at: string;
 }
 export interface ClientOptions {
   baseUrl?: string;
@@ -201,12 +201,8 @@ function safeHeaders(value: unknown): Record<string, string> {
   const suffixes = new Set<string>();
   let prefix: string | undefined;
   for (const [name, content] of Object.entries(value)) {
-    const match = /^([!#$%&'*+\-.^_`|~0-9a-z]+)-([abcdfz])$/i.exec(name);
-    if (
-      !match ||
-      typeof content !== "string" ||
-      /[\u0000-\u001f\u007f\u0100-\uffff]/.test(content)
-    )
+    const match = /^([!#$%&'*+\-.^_`|~0-9a-z]{1,128})-([abcdfz])$/i.exec(name);
+    if (!match || typeof content !== "string" || /[^\x21-\x7e]/.test(content))
       throw new Error("Invalid header");
     const family = match[1].toLowerCase();
     const suffix = match[2].toLowerCase();
@@ -349,6 +345,97 @@ function checkFields(
     }
   });
 }
+const DEFAULT_PROFILE = {
+  user_agent: "Mozilla/5.0",
+  platform: "MacIntel",
+  language: "en-US",
+  languages: ["en-US", "en"],
+  screen: {
+    width: 1920,
+    height: 1080,
+    availWidth: 1920,
+    availHeight: 1040,
+    colorDepth: 24,
+    pixelDepth: 24,
+  },
+  window: {
+    innerWidth: 1920,
+    innerHeight: 1040,
+    outerWidth: 1920,
+    outerHeight: 1080,
+    devicePixelRatio: 1.0,
+    screenX: 0,
+    screenY: 0,
+    screenLeft: 0,
+    screenTop: 0,
+    pageXOffset: 0,
+    pageYOffset: 0,
+  },
+  webgl: { renderer: "Sandbox Renderer", vendor: "Google Inc." },
+  canvas: {
+    data_url:
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgAAIAAAUAAXpeqz8AAAAASUVORK5CYII=",
+  },
+  navigator: {
+    userAgent: "Mozilla/5.0",
+    platform: "MacIntel",
+    vendor: "Google Inc.",
+    appVersion: "5.0",
+    appCodeName: "Mozilla",
+    appName: "Netscape",
+    product: "Gecko",
+    language: "en-US",
+    languages: ["en-US", "en"],
+    hardwareConcurrency: 8,
+    maxTouchPoints: 0,
+    webdriver: false,
+    cookieEnabled: true,
+    doNotTrack: null,
+  },
+};
+function effectiveProfileSize(profile: BrowserProfile): number {
+  const effective = copyJson(DEFAULT_PROFILE) as Record<string, any>;
+  for (const [key, value] of Object.entries(profile)) {
+    if (isRecord(value)) Object.assign(effective[key], value);
+    else effective[key] = value;
+  }
+  const suppliedNavigator = profile.navigator ?? {};
+  for (const [top, alias] of [
+    ["user_agent", "userAgent"],
+    ["platform", "platform"],
+    ["language", "language"],
+    ["languages", "languages"],
+  ]) {
+    const value = Object.hasOwn(suppliedNavigator, alias)
+      ? (suppliedNavigator as Record<string, unknown>)[alias]
+      : effective[top];
+    effective[top] = value;
+    effective.navigator[alias] = value;
+  }
+  if (!Object.hasOwn(suppliedNavigator, "appVersion"))
+    effective.navigator.appVersion = effective.user_agent.replace(
+      /^Mozilla\//,
+      "",
+    );
+  // Match Python's canonical JSON separators and floating-point DPR serialization.
+  function canonical(value: any, key?: string): string {
+    if (Array.isArray(value))
+      return "[" + value.map((v) => canonical(v)).join(", ") + "]";
+    if (isRecord(value))
+      return (
+        "{" +
+        Object.entries(value)
+          .map(([k, v]) => JSON.stringify(k) + ": " + canonical(v, k))
+          .join(", ") +
+        "}"
+      );
+    if (key === "devicePixelRatio" && Number.isInteger(value))
+      return value + ".0";
+    return JSON.stringify(value);
+  }
+  return Buffer.byteLength(canonical(effective));
+}
+
 function validProfile(value: unknown): value is BrowserProfile {
   if (!checkFields(value, profileFields)) return false;
   if (
@@ -411,6 +498,16 @@ function validProfile(value: unknown): value is BrowserProfile {
       outerWidth: [1, 32768],
       outerHeight: [1, 32768],
       devicePixelRatio: [0.1, 16],
+      ...Object.fromEntries(
+        [
+          "screenX",
+          "screenY",
+          "screenLeft",
+          "screenTop",
+          "pageXOffset",
+          "pageYOffset",
+        ].map((k) => [k, [-2147483648, 2147483647] as [number, number]]),
+      ),
     },
     navigator: { hardwareConcurrency: [1, 1024], maxTouchPoints: [0, 100] },
   };
@@ -479,10 +576,7 @@ function validateShape(value: ShapeRequest): ShapeRequest {
       !/^[A-Za-z0-9_-]{16,128}$/.test(v.material_ref)
     )
       throw new Error();
-    if (
-      !validProfile(v.profile) ||
-      Buffer.byteLength(JSON.stringify(v.profile)) > 64 * 1024
-    )
+    if (!validProfile(v.profile) || effectiveProfileSize(v.profile) > 64 * 1024)
       throw new Error();
     const r = v.request;
     if (
@@ -562,8 +656,8 @@ function parseResult(
     )
       throw new Error();
     if (
-      (value.material_ref === undefined) !==
-      (value.material_expires_at === undefined)
+      value.material_ref === undefined ||
+      value.material_expires_at === undefined
     )
       throw new Error();
     if (
@@ -581,12 +675,8 @@ function parseResult(
       request_id: value.request_id as string,
       generation_ms: value.generation_ms as number,
       profile_used: copyJson(value.profile_used) as BrowserProfile,
-      ...(value.material_ref === undefined
-        ? {}
-        : {
-            material_ref: value.material_ref as string,
-            material_expires_at: value.material_expires_at as string,
-          }),
+      material_ref: value.material_ref as string,
+      material_expires_at: value.material_expires_at as string,
     };
     Object.defineProperty(result, Symbol.for("nodejs.util.inspect.custom"), {
       value: () => ({
