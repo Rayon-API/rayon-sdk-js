@@ -33,3 +33,5 @@ The workflow runs on GitHub-hosted runners using Node.js 24 and verifies npm is 
 For a later release, update `package.json` and `package-lock.json` to the same new version, commit the reviewed changes, tag that commit `v<version>`, and create a GitHub release for that tag. Publishing the release triggers tests, both builds, the tarball audit, import/type checks, and tag/version validation before `npm publish --access public`.
 
 Prereleases must use an appropriate npm dist-tag; the supplied workflow intentionally rejects GitHub prereleases. No registry publish or remote push is performed by local tests or builds.
+
+Version 1.0 is a breaking migration to the material-only API. Verify README migration guidance, exact target body preservation, lifecycle and cancellation, strict size/profile limits, safe error envelopes, expiry-scoped references, no automatic POST retries, and ESM/CommonJS type exports. Keep published 0.1 packages and release tags immutable. Never include customer scripts, captured material, credentials, or private fixtures in packed files.

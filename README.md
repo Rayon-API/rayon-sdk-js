@@ -1,63 +1,60 @@
-# Rayon API JavaScript SDK
+# Rayon JavaScript SDK
 
-A small server-side JavaScript and TypeScript client for Rayon API. Requires Node.js **20.18.1 or newer** and uses Undici. ESM, CommonJS, and TypeScript declarations are included. Keep API keys on your server.
-
-Install from npm:
+Material-only server-side JavaScript and TypeScript clients for `POST /v1/shape` and `GET /v1/usage`. Requires Node.js 20.18.1+. ESM, CommonJS, and declarations are included. Keep API keys on your server.
 
 ```sh
-npm install rayon-sdk-js
+npm install rayon-sdk-js@^1
 ```
 
+Prepare JavaScript material from files you own or are authorized to use. URLs provide execution context; neither SDK nor API downloads them. Preserve script order.
+
 ```js
-import { solve, RayonError } from 'rayon-sdk-js';
+import { readFile } from 'node:fs/promises';
+import { RayonClient } from 'rayon-sdk-js';
 
-const apiKey = process.env.RAYON_API_KEY;
-if (!apiKey) throw new Error('Set RAYON_API_KEY on your server');
-
+const client = new RayonClient(process.env.RAYON_API_KEY);
 try {
-  const result = await solve('https://example.com/product', apiKey);
-  console.log(result.status, result.method, result.duration_ms);
-  // result.headers and result.cookies contain the captured session data.
-} catch (error) {
-  if (!(error instanceof RayonError)) throw error;
-  console.error(error.kind, error.statusCode, error.requestId);
+  const result = await client.generate({
+    source_url: 'https://example.com/page',
+    scripts: [{
+      url: 'https://example.com/assets/owned.js',
+      source: await readFile('owned.js', 'utf8'),
+    }],
+    profile: { user_agent: 'your actual user agent', language: 'en-GB' },
+    request: {
+      url: 'https://example.com/api/items',
+      method: 'POST',
+      content_type: 'application/json',
+      body: ' {"item": 1}\n', // Exact target body, including whitespace.
+    },
+    document_cookie: 'session=current', // Current JavaScript-visible cookies.
+  });
+  const usage = await client.usage();
+  // Explicitly access result.headers and result.profile_used for your target client.
+} finally {
+  await client.close();
 }
 ```
 
-CommonJS uses the same exports:
+CommonJS: `const { RayonClient, generate, RayonError } = require('rayon-sdk-js')`.
 
-```js
-const { solve, RayonError } = require('rayon-sdk-js');
-```
+`new RayonClient(apiKey, { baseUrl?, timeoutMs? })` owns a persistent ordinary-TLS connection pool. Its defaults are `https://api.rayonapi.com` and a 150,000 ms total deadline. Close it explicitly. `client.generate(shape, { signal? })` and `client.usage({ signal? })` support `AbortSignal`. `generate(shape, apiKey, { baseUrl?, timeoutMs?, signal? })` is a one-shot helper that closes its pool. An optional `dispatcher` can be injected; an injected dispatcher remains owned by the caller.
 
-`solve(targetUrl, apiKey, options?)` posts to `/solve` with Bearer authentication. The JSON body contains only `target_url` and an optional `profile` object. Options:
+Supply exactly one of `scripts` and `material_ref`. `source_url`, `profile`, and all four `request` fields are always required. `body: null` means no target body; `''` means an explicit empty body. GET and HEAD require null; a supplied body requires a supported text content type. The body string is never parsed, reformatted, or converted to an object. `ShapeRequest`, `BrowserProfile`, `TargetRequest`, `ScriptMaterial`, and `ShapeResult` are exported types.
 
-| Option | Default | Meaning |
-| --- | --- | --- |
-| `profile` | Omitted | JSON fingerprint fields passed to the API. If a nested `profile` field is supplied, it must be an object. |
-| `baseUrl` | `https://api.rayonapi.com` | API base URL; an optional path is retained. HTTPS is required except for localhost, `127.0.0.1`, and `::1` test servers. |
-| `timeoutMs` | `150000` | Total request deadline, including the response body. Integer from 1 to 2147483647. |
+Persistent clients cache only material references, keyed by source URL and ordered script URLs and source. Each cache is scoped to one client, API key, and server and honors the server's `material_expires_at` expiry. Repeating the same material uses its unexpired reference. Profile, request, and document cookies are freshly copied per call. Expired references trigger a new upload on the next call supplying scripts; a failed reference request is never automatically retried. Explicit references also require their original source URL.
 
-The client performs one attempt and follows no redirects. It does not make requests to the target website itself. URLs must be absolute HTTP(S) URLs of at most 8192 characters, without fragments, credentials, backslashes, or port zero. Response consumption is limited to 2 MiB of wire data and decoded data, including gzip, deflate, or Brotli decoding, within the request deadline.
+`BrowserProfile` strictly supports `user_agent`, `platform`, `language`, `languages`, and nested `screen`, `window`, `webgl`, `canvas`, `navigator`. Conflicting aliases are rejected. `{}` selects server defaults. Screen/window dimensions, WebGL renderer/vendor, navigator identity, and a PNG `canvas.data_url` are supported. Effective `profile_used` omits canvas pixels.
 
-An accepted result preserves the API's snake_case fields: `status`, `method`, `target_url`, `duration_ms`, `headers`, `cookies`, `profile_used`, and `errors`. `method` is `v8_sandbox` or `playwright`. Success requires exactly one complete six-header family with suffixes `a/b/c/d/f/z`; its prefix may vary, and `d` may be empty. Header control characters and values outside the HTTP byte range are rejected. `accepted` means the headers were captured; it does not establish verification by the target website. `errors` may contain diagnostics from an earlier capture tier even when a later tier succeeds.
+A result contains `headers`, `request_id`, `generation_ms`, `profile_used`, and optional `material_ref`/`material_expires_at`. Returned headers preserve the actual dynamic common prefix and complete `a`, `b`, `c`, `d`, `f`, `z` suffixes; `d` may be empty. Generation does not assert target acceptance. No cookies, status, or internal method are returned. Node inspection redacts headers, profile data, and references; explicit field access and JSON serialization retain result values.
 
-Cookies retain their API-supplied `name`, `value`, `domain`, and `path`, plus safe future fields. No expiry, secure, or other browser attributes are inferred. Headers and profile objects use null prototypes; prototype-sensitive keys are rejected. Treat headers and cookies as sensitive session data. Normal `console.log(result)` and `util.inspect(result)` redact headers, cookies, profiles, diagnostics, and the target URL. Explicit field access and `JSON.stringify(result)` intentionally retain all result data; serialize it only where those credentials should be available.
+Limits are 4 MiB of serialized request JSON, 16 scripts, 2 MiB per script and 3 MiB of total UTF-8 source, 256 KiB of UTF-8 body, 64 KiB of profile JSON, and 16 KiB of document cookies. Wire and decoded API responses are each bounded to 256 KiB, including gzip/deflate/Brotli decoding. The deadline includes response streaming. Certificate verification stays enabled; no redirects are followed and environment proxies are not used. Custom bases require HTTPS except local HTTP on `localhost`, `127.0.0.1`, or `[::1]`; credentials, fragments, and base queries are refused. API transport does not impersonate a browser.
 
-`RayonError` exposes `kind`, optional `statusCode`, `requestId`, and `retryAfter` (seconds as a string when safely supplied). Its fixed message excludes raw response bodies and transport errors. HTTP 200 results with `failed` or `rejected` status throw a `capture` error.
+`RayonError` exposes `kind`, sanitized `statusCode`, `requestId`, `code`, and `retryAfter`. Raw server messages and transport causes are discarded. Kinds are `validation`, `auth`, `rate_limit`, `migration`, `http`, `invalid_response`, `network`, `timeout`, and `aborted`. HTTP 410 yields `migration`; 429 yields `rate_limit` with a validated Retry-After seconds or HTTP-date string. No request is retried automatically: admitted generations can consume quota.
 
-| Kind | Meaning |
-| --- | --- |
-| `validation` | Invalid URL, key, profile, or options. |
-| `auth` | HTTP 401 or 403. |
-| `rate_limit` | HTTP 429. |
-| `http` | Other unsuccessful HTTP status, including redirects. |
-| `capture` | A valid capture response reported failure or rejection. |
-| `invalid_response` | Malformed JSON or an invalid response contract. |
-| `network` | Transport failed. |
-| `timeout` | Request deadline expired. |
+## Migration from 0.1
 
-For local development:
+Version 1.0 removes URL-only `solve`, `SolveOptions`, and `SolveResult`. Replace them with `generate`/`RayonClient`, caller-prepared material, a fresh browser profile, and exact target request context. Use `generation_ms`, `headers`, and `profile_used` in place of duration/status/method/cookie handling. Published 0.1 packages and tags remain unchanged and target the retired API.
 
 ```sh
 npm ci
@@ -66,6 +63,4 @@ npm run build
 npm run test:package
 ```
 
-Tests use Undici's offline mock transport and a loopback server for streaming cancellation. The package check creates a tarball, audits its file list, and verifies ESM/CommonJS imports and declarations.
-
-MIT licensed. This repository contains the API client only.
+See [RELEASE.md](RELEASE.md) for release checks. Licensed under [MIT](LICENSE).
