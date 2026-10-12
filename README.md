@@ -36,15 +36,15 @@ const { solve, RayonError } = require('rayon-sdk-js');
 
 | Option | Default | Meaning |
 | --- | --- | --- |
-| `profile` | Omitted | JSON fingerprint fields passed to the API. |
+| `profile` | Omitted | JSON fingerprint fields passed to the API. If a nested `profile` field is supplied, it must be an object. |
 | `baseUrl` | `https://api.rayonapi.com` | API base URL; an optional path is retained. HTTPS is required except for localhost, `127.0.0.1`, and `::1` test servers. |
 | `timeoutMs` | `150000` | Total request deadline, including the response body. Integer from 1 to 2147483647. |
 
-The client performs one attempt and follows no redirects. It does not make requests to the target website itself.
+The client performs one attempt and follows no redirects. It does not make requests to the target website itself. URLs must be absolute HTTP(S) URLs of at most 8192 characters, without fragments, credentials, backslashes, or port zero. Response consumption is limited to 2 MiB of wire data and decoded data, including gzip, deflate, or Brotli decoding, within the request deadline.
 
-An accepted result preserves the API's snake_case fields: `status`, `method`, `target_url`, `duration_ms`, `headers`, `cookies`, `profile_used`, and `errors`. `method` is `v8_sandbox` or `playwright`. Success requires exactly one complete six-header family with suffixes `a/b/c/d/f/z`; its prefix may vary, and `d` may be empty. `accepted` means the headers were captured; it does not establish verification by the target website. `errors` may contain diagnostics from an earlier capture tier even when a later tier succeeds.
+An accepted result preserves the API's snake_case fields: `status`, `method`, `target_url`, `duration_ms`, `headers`, `cookies`, `profile_used`, and `errors`. `method` is `v8_sandbox` or `playwright`. Success requires exactly one complete six-header family with suffixes `a/b/c/d/f/z`; its prefix may vary, and `d` may be empty. Header names are limited to 256 characters and values to 16384 characters; control characters and values outside the HTTP byte range are rejected. `accepted` means the headers were captured; it does not establish verification by the target website. `errors` may contain diagnostics from an earlier capture tier even when a later tier succeeds.
 
-Cookies retain their API-supplied `name`, `value`, `domain`, and `path`, plus safe future fields. No expiry, secure, or other browser attributes are inferred. Headers and profile objects use null prototypes; prototype-sensitive keys are rejected. Treat headers and cookies as sensitive session data.
+Cookies retain their API-supplied `name`, `value`, `domain`, and `path`, plus safe future fields. No expiry, secure, or other browser attributes are inferred. Headers and profile objects use null prototypes; prototype-sensitive keys are rejected. Treat headers and cookies as sensitive session data. Normal `console.log(result)` and `util.inspect(result)` redact headers, cookies, profiles, diagnostics, and the target URL. Explicit field access and `JSON.stringify(result)` intentionally retain all result data; serialize it only where those credentials should be available.
 
 `RayonError` exposes `kind`, optional `statusCode`, `requestId`, and `retryAfter` (seconds as a string when safely supplied). Its fixed message excludes raw response bodies and transport errors. HTTP 200 results with `failed` or `rejected` status throw a `capture` error.
 

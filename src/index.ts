@@ -1,4 +1,7 @@
-import { request } from 'undici';
+import { request, type Dispatcher } from 'undici';
+import { Transform } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import { createGunzip, createInflate, createBrotliDecompress } from 'node:zlib';
 
 export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 export type Profile = { [key: string]: JsonValue };
@@ -62,10 +65,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return prototype === null || prototype === Object.prototype;
 }
 function validUrl(value: unknown): value is string {
-  if (typeof value !== 'string' || value.trim() !== value || /[\u0000-\u0020\u007f]/.test(value)) return false;
+  if (typeof value !== 'string' || value.length > 8192 || /[\u0000-\u0020\u007f\\#]/.test(value)) return false;
+  const authority = /^https?:\/\/([^/?#]*)/i.exec(value);
+  if (!authority || authority[1].includes('@')) return false;
   try {
     const parsed = new URL(value);
-    return (parsed.protocol === 'https:' || parsed.protocol === 'http:') && !parsed.username && !parsed.password;
+    return (parsed.protocol === 'https:' || parsed.protocol === 'http:') && !parsed.username && !parsed.password && parsed.port !== '0';
   } catch { return false; }
 }
 function copyJson(value: unknown, ancestors = new Set<object>()): JsonValue {
@@ -91,7 +96,7 @@ function safeHeaders(value: unknown): Record<string, string> {
   let prefix: string | undefined;
   for (const [name, content] of Object.entries(value)) {
     const match = /^([!#$%&'*+\-.^_`|~0-9a-z]+)-([abcdfz])$/i.exec(name);
-    if (!match || typeof content !== 'string' || /[\r\n\u0000]/.test(content)) throw new Error('Invalid header');
+    if (!match || name.length > 256 || typeof content !== 'string' || content.length > 16384 || /[\u0000-\u001f\u007f\u0100-\uffff]/.test(content)) throw new Error('Invalid header');
     const family = match[1].toLowerCase();
     const suffix = match[2].toLowerCase();
     if ((prefix !== undefined && prefix !== family) || suffixes.has(suffix) || (suffix !== 'd' && !content.trim())) throw new Error('Incomplete header family');
@@ -116,11 +121,17 @@ function parseResult(value: unknown, targetUrl: string, metadata: ErrorMetadata)
       return { ...(copyJson(cookie) as Profile) } as SessionCookie;
     });
     if (value.status !== 'accepted') throw new RayonError('capture', metadata);
-    return {
+    const result: SolveResult = {
       status: 'accepted', method: value.method as SolveResult['method'], target_url: targetUrl,
       duration_ms: value.duration_ms as number, headers: safeHeaders(value.headers), cookies,
       profile_used: profile, errors: [...value.errors] as string[],
     };
+    Object.defineProperty(result, Symbol.for('nodejs.util.inspect.custom'), {
+      value: () => ({ status: 'accepted', method: result.method, duration_ms: result.duration_ms,
+        target_url: '[REDACTED]', headers: '[REDACTED]', cookies: '[REDACTED]',
+        profile_used: '[REDACTED]', errors: '[REDACTED]' }),
+    });
+    return result;
   } catch (error) {
     if (error instanceof RayonError) throw error;
     throw new RayonError('invalid_response', metadata);
@@ -134,6 +145,33 @@ function responseMetadata(statusCode: number, headers: Record<string, string | s
     requestId: typeof requestId === 'string' && /^[a-z0-9._:-]{1,128}$/i.test(requestId) && !requestId.includes(apiKey) ? requestId : undefined,
     retryAfter: typeof retryAfter === 'string' && /^\d{1,10}$/.test(retryAfter) && !retryAfter.includes(apiKey) ? retryAfter : undefined,
   };
+}
+
+const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
+async function readResponse(body: Dispatcher.ResponseData['body'], encoding: string | string[] | undefined, signal: AbortSignal): Promise<unknown> {
+  const bounded = () => {
+    let bytes = 0;
+    return new Transform({ transform(chunk: Buffer, _encoding, callback) {
+      bytes += chunk.length;
+      callback(bytes > MAX_RESPONSE_BYTES ? new Error('Response limit exceeded') : null, chunk);
+    } });
+  };
+  const chunks: Buffer[] = [];
+  const collector = new Transform({ transform(chunk: Buffer, _encoding, callback) {
+    chunks.push(chunk);
+    callback();
+  } });
+  const stages = [body, bounded()];
+  if (encoding !== undefined && encoding !== 'identity') {
+    if (encoding === 'gzip') stages.push(createGunzip());
+    else if (encoding === 'deflate') stages.push(createInflate());
+    else if (encoding === 'br') stages.push(createBrotliDecompress());
+    else { body.destroy(); throw new Error('Unsupported response encoding'); }
+    stages.push(bounded());
+  }
+  // Both wire bytes and decoded bytes are bounded; abort also cancels decoding.
+  await pipeline([...stages, collector], { signal });
+  return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
 }
 
 /** Capture telemetry headers through Rayon API. Keep API keys in server-side code. */
@@ -152,7 +190,7 @@ export async function solve(targetUrl: string, apiKey: string, options: SolveOpt
     if (endpoint.search || endpoint.hash || (endpoint.protocol === 'http:' && !['localhost', '127.0.0.1', '[::1]'].includes(endpoint.hostname))) throw new Error('Unsafe base URL');
     endpoint.pathname = endpoint.pathname.replace(/\/$/, '') + '/solve';
     if (options.profile !== undefined) {
-      if (!isRecord(options.profile)) throw new Error('Invalid profile');
+      if (!isRecord(options.profile) || (Object.hasOwn(options.profile, 'profile') && !isRecord(options.profile.profile))) throw new Error('Invalid profile');
       profile = copyJson(options.profile) as Profile;
     }
   } catch { throw new RayonError('validation'); }
@@ -174,7 +212,7 @@ export async function solve(targetUrl: string, apiKey: string, options: SolveOpt
       throw new RayonError(kind, metadata);
     }
     let value: unknown;
-    try { value = await response.body.json(); }
+    try { value = await readResponse(response.body, response.headers['content-encoding'], controller.signal); }
     catch {
       if (controller.signal.aborted) throw new RayonError('timeout', metadata);
       throw new RayonError('invalid_response', metadata);
