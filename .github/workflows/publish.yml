@@ -1,0 +1,40 @@
+name: Publish npm package
+on:
+  release:
+    types: [published]
+permissions:
+  contents: read
+jobs:
+  publish:
+    if: ${{ !github.event.release.prerelease }}
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Validate npm and release version
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          node --input-type=module <<'JS'
+          import { execFileSync } from 'node:child_process';
+          import { readFileSync } from 'node:fs';
+          const npm = execFileSync('npm', ['--version'], { encoding: 'utf8' }).trim().split('.').map(Number);
+          if (npm[0] < 11 || (npm[0] === 11 && (npm[1] < 5 || (npm[1] === 5 && npm[2] < 1)))) throw new Error('npm >=11.5.1 required');
+          const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
+          const lock = JSON.parse(readFileSync('package-lock.json', 'utf8'));
+          if (process.env.RELEASE_TAG !== `v${pkg.version}` || lock.version !== pkg.version || lock.packages[''].version !== pkg.version) throw new Error('Release tag and package versions must match');
+          JS
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - run: npm run test:package
+      - run: npm publish --access public
