@@ -157,7 +157,7 @@ test('aborts while consuming a slow response body using localhost only', async (
   const address = server.address();
   assert.ok(address && typeof address !== 'string');
   try {
-    await assert.rejects(solve(target, key, { baseUrl: `http://127.0.0.1:${address.port}`, timeoutMs: 30 }), expectError('timeout', 200));
+    await assert.rejects(solve(target, key, { baseUrl: `http://127.0.0.1:${address.port}`, timeoutMs: 250 }), expectError('timeout', 200));
     await new Promise(resolve => setTimeout(resolve, 20));
     assert.equal(closed, true);
   } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }

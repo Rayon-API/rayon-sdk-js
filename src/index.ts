@@ -67,7 +67,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function validUrl(value: unknown): value is string {
   if (typeof value !== 'string' || value.length > 8192 || /[\u0000-\u0020\u007f\\#]/.test(value)) return false;
   const authority = /^https?:\/\/([^/?#]*)/i.exec(value);
-  if (!authority || authority[1].includes('@')) return false;
+  if (!authority || !authority[1] || authority[1].includes('@')) return false;
   try {
     const parsed = new URL(value);
     return (parsed.protocol === 'https:' || parsed.protocol === 'http:') && !parsed.username && !parsed.password && parsed.port !== '0';
@@ -96,7 +96,7 @@ function safeHeaders(value: unknown): Record<string, string> {
   let prefix: string | undefined;
   for (const [name, content] of Object.entries(value)) {
     const match = /^([!#$%&'*+\-.^_`|~0-9a-z]+)-([abcdfz])$/i.exec(name);
-    if (!match || name.length > 256 || typeof content !== 'string' || content.length > 16384 || /[\u0000-\u001f\u007f\u0100-\uffff]/.test(content)) throw new Error('Invalid header');
+    if (!match || typeof content !== 'string' || /[\u0000-\u001f\u007f\u0100-\uffff]/.test(content)) throw new Error('Invalid header');
     const family = match[1].toLowerCase();
     const suffix = match[2].toLowerCase();
     if ((prefix !== undefined && prefix !== family) || suffixes.has(suffix) || (suffix !== 'd' && !content.trim())) throw new Error('Incomplete header family');

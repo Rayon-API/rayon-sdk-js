@@ -59,12 +59,12 @@ for (const [encoding, compress] of [['gzip', gzipSync], ['deflate', deflateSync]
     await assert.rejects(solve(target, key), errorKind('invalid_response'));
   });
 }
-for (const url of ['https://example.com#', 'https://example.com#section', 'https://example.com:0/', 'https://example.com:000/', 'https://example.com\\path', 'https://@example.com/', 'https:example.com', 'https://example.com/' + 'x'.repeat(8192)]) {
+for (const url of ['https://example.com#', 'https://example.com#section', 'https://example.com:0/', 'https://example.com:000/', 'https://example.com\\path', 'https://@example.com/', 'https:example.com', 'https:///example.com', 'https:////example.com', 'https://example.com/' + 'x'.repeat(8192)]) {
   test(`rejects ambiguous target URL (${url.slice(0, 80)})`, async () => {
     await assert.rejects(solve(url, key), errorKind('validation'));
   });
 }
-for (const baseUrl of ['https://example.com#', 'https://example.com:0/', 'https://@example.com/', 'https://example.com\\path']) {
+for (const baseUrl of ['https://example.com#', 'https://example.com:0/', 'https://@example.com/', 'https://example.com\\path', 'https:///example.com', 'https:////example.com']) {
   test('rejects ambiguous API base URLs before sending the key', async () => {
     await assert.rejects(solve(target, key, { baseUrl }), errorKind('validation'));
   });
@@ -78,12 +78,13 @@ for (const value of ['\u0001', '\t', '\u001f', '\u007f', '\u0100', '🦊']) {
   });
 }
 for (const [name, body] of [
-  ['header name exceeds 256 characters', accepted('X'.repeat(255))],
-  ['header value exceeds 16384 characters', { ...accepted(), headers: { ...accepted().headers, 'X-Variable9-a': 'x'.repeat(16385) } }],
+  ['long header names below the total response limit', accepted('X'.repeat(1000))],
+  ['long header values below the total response limit', { ...accepted(), headers: { ...accepted().headers, 'X-Variable9-a': 'x'.repeat(100000) } }],
 ] as const) {
-  test(`rejects ${name}`, async () => {
+  test(`accepts ${name}`, async () => {
     reply(body);
-    await assert.rejects(solve(target, key), errorKind('invalid_response'));
+    const result = await solve(target, key);
+    assert.deepEqual({ ...result.headers }, body.headers);
   });
 }
 for (const wrapped of ['custom-label', null, 3, []]) {
@@ -91,7 +92,7 @@ for (const wrapped of ['custom-label', null, 3, []]) {
     await assert.rejects(solve(target, key, { profile: { profile: wrapped } }), errorKind('validation'));
   });
 }
-test('accepts an object profile wrapper and header size boundaries', async () => {
+test('accepts an object profile wrapper and a long header family', async () => {
   const body = accepted('X'.repeat(254));
   body.headers['X'.repeat(254) + '-a'] = 'x'.repeat(16384);
   mock.get('https://api.rayonapi.com').intercept({ path: '/solve', method: 'POST', body: JSON.stringify({ target_url: target, profile: { profile: { locale: 'en-GB' } } }) }).reply(200, body);
