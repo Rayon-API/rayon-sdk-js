@@ -154,7 +154,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function validUrl(value: unknown): value is string {
   if (
     typeof value !== "string" ||
-    value.length > 8192 ||
+    Array.from(value).length > 8192 ||
     /[\u0000-\u0020\u007f\\#]/.test(value)
   )
     return false;
@@ -471,14 +471,16 @@ function validProfile(value: unknown): value is BrowserProfile {
   for (const obj of [value, nav, value.webgl]) {
     if (isRecord(obj)) {
       if (
-        Object.values(obj).some((v) => typeof v === "string" && v.length > 8192)
+        Object.values(obj).some(
+          (v) => typeof v === "string" && Array.from(v).length > 8192,
+        )
       )
         return false;
       if (
         Object.hasOwn(obj, "languages") &&
         ((obj.languages as string[]).length < 1 ||
           (obj.languages as string[]).length > 32 ||
-          (obj.languages as string[]).some((v) => v.length > 8192))
+          (obj.languages as string[]).some((v) => Array.from(v).length > 8192))
       )
         return false;
     }
@@ -525,6 +527,18 @@ function validProfile(value: unknown): value is BrowserProfile {
   }
   return true;
 }
+/** Validate browser identity offline; return a deep copy of supplied fields. */
+export function validate_profile(profile: BrowserProfile): BrowserProfile {
+  try {
+    const checked = copyJson(profile);
+    if (!validProfile(checked) || effectiveProfileSize(checked) > 64 * 1024)
+      throw new Error();
+    return checked;
+  } catch {
+    throw new RayonError("validation");
+  }
+}
+
 function validateShape(value: ShapeRequest): ShapeRequest {
   try {
     const v = copyJson(value) as Record<string, unknown>;
@@ -576,8 +590,7 @@ function validateShape(value: ShapeRequest): ShapeRequest {
       !/^[A-Za-z0-9_-]{16,128}$/.test(v.material_ref)
     )
       throw new Error();
-    if (!validProfile(v.profile) || effectiveProfileSize(v.profile) > 64 * 1024)
-      throw new Error();
+    v.profile = validate_profile(v.profile as BrowserProfile);
     const r = v.request;
     if (
       !isRecord(r) ||

@@ -456,3 +456,36 @@ for (const prefix of ["ee30zvqlwf", "p".repeat(128), "!#$%&'*+-.^_`|~"])
     reply(result({ headers }));
     assert.deepEqual({ ...(await generate(shape(), key)).headers }, headers);
   });
+test("bounded browser profile text and languages count Unicode code points", async () => {
+  for (const profile of [
+    { navigator: { vendor: "😀".repeat(5000) } },
+    { language: "😀".repeat(5000) },
+    { languages: ["😀".repeat(5000)] },
+    { webgl: { renderer: "😀".repeat(5000) } },
+  ]) {
+    reply();
+    await generate(shape({ profile }), key);
+  }
+});
+test("URL bound counts code points while preserving original context", async () => {
+  reply();
+  await generate(
+    shape({ source_url: "https://example.com/" + "😀".repeat(5000) }),
+    key,
+  );
+});
+test("public profile preflight preserves supplied fields and deep copies", () => {
+  const profile = {
+    navigator: { vendor: "😀".repeat(5000) },
+    window: { screenX: -2147483648 },
+  };
+  const checked = sdk.validate_profile(profile);
+  assert.equal(checked.navigator?.vendor, profile.navigator.vendor);
+  checked.navigator!.vendor = "changed";
+  assert.equal(profile.navigator.vendor, "😀".repeat(5000));
+  assert.equal("user_agent" in checked, false);
+  assert.throws(
+    () => sdk.validate_profile({ window: { screenX: 2147483648 } }),
+    errorKind("validation"),
+  );
+});

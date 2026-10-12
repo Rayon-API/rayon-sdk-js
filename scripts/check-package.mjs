@@ -59,7 +59,7 @@ try {
     "dir",
   );
   writeFileSync(join(temp, "package.json"), '{"type":"module"}');
-  const smoke = `const assert = IMPORT_ASSERT; const { generate, RayonError } = IMPORT_SDK;\n(async () => { assert.equal(typeof generate, 'function'); await assert.rejects(generate({}, 'key'), e => e instanceof RayonError && e.kind === 'validation'); })().catch(e => { console.error(e); process.exitCode = 1; });`;
+  const smoke = `const assert = IMPORT_ASSERT; const { generate, validate_profile, RayonError } = IMPORT_SDK;\n(async () => { assert.equal(typeof generate, 'function'); assert.equal(typeof validate_profile, 'function'); assert.equal(validate_profile({ navigator: {vendor: '😀'.repeat(5000)} }).navigator.vendor.length, 10000); await assert.rejects(generate({}, 'key'), e => e instanceof RayonError && e.kind === 'validation'); })().catch(e => { console.error(e); process.exitCode = 1; });`;
   writeFileSync(
     join(temp, "smoke.cjs"),
     smoke
@@ -74,8 +74,8 @@ try {
         "import assert from 'node:assert/strict';",
       )
       .replace(
-        "const { generate, RayonError } = IMPORT_SDK;",
-        "import { generate, RayonError } from 'rayon-sdk-js';",
+        "const { generate, validate_profile, RayonError } = IMPORT_SDK;",
+        "import { generate, validate_profile, RayonError } from 'rayon-sdk-js';",
       ),
   );
   for (const file of ["smoke.mjs", "smoke.cjs"])
@@ -83,7 +83,7 @@ try {
   for (const extension of ["mts", "cts"]) {
     writeFileSync(
       join(temp, `consumer.${extension}`),
-      "import { generate, RayonError, type ShapeResult, type GenerateOptions } from 'rayon-sdk-js';\nconst options: GenerateOptions = { timeoutMs: 1000 };\nconst result: Promise<ShapeResult> = generate({ source_url: 'https://example.com', scripts: [{url: 'https://example.com/owned.js', source: '/* owned */'}], profile: {}, request: {url: 'https://example.com', method: 'GET', content_type: null, body: null} }, 'key', options);\nconst error: string = new RayonError('timeout').kind;\n",
+      "import { generate, validate_profile, RayonError, type ShapeResult, type GenerateOptions } from 'rayon-sdk-js';\nconst options: GenerateOptions = { timeoutMs: 1000 };\nconst result: Promise<ShapeResult> = generate({ source_url: 'https://example.com', scripts: [{url: 'https://example.com/owned.js', source: '/* owned */'}], profile: {}, request: {url: 'https://example.com', method: 'GET', content_type: null, body: null} }, 'key', options);\nconst profile = validate_profile({ navigator: {vendor: '😀'.repeat(5000)} });\nconst error: string = new RayonError('timeout').kind;\n",
     );
     execFileSync(
       process.execPath,
