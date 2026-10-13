@@ -762,7 +762,7 @@ export class RayonClient {
           !["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname))
       )
         throw new Error();
-      const timeout = options.timeoutMs ?? 150000;
+      const timeout = options.timeoutMs ?? 45000;
       if (
         !Number.isSafeInteger(timeout) ||
         timeout <= 0 ||

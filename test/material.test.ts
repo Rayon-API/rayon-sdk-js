@@ -489,3 +489,43 @@ test("public profile preflight preserves supplied fields and deep copies", () =>
     errorKind("validation"),
   );
 });
+for (const mode of ["client", "helper"])
+  for (const override of [undefined, 75000])
+    test("default deadline is 45 seconds and explicit overrides survive", async () => {
+      const seen: { headersTimeout?: number; bodyTimeout?: number }[] = [];
+      const dispatch = mock.dispatch.bind(mock);
+      mock.dispatch = ((options: any, handler: any) => {
+        seen.push({
+          headersTimeout: options.headersTimeout,
+          bodyTimeout: options.bodyTimeout,
+        });
+        return dispatch(options, handler);
+      }) as typeof mock.dispatch;
+      reply();
+      const options = {
+        dispatcher: mock,
+        ...(override === undefined ? {} : { timeoutMs: override }),
+      };
+      if (mode === "helper") await sdk.generate(shape(), key, options);
+      else {
+        mock
+          .get(origin)
+          .intercept({ path: "/v1/usage", method: "GET" })
+          .reply(200, { daily_used: 1 });
+        const client = new sdk.RayonClient(key, options);
+        try {
+          await client.generate(shape());
+          await client.usage();
+        } finally {
+          await client.close();
+        }
+      }
+      assert.ok(seen.length > 0);
+      assert.ok(
+        seen.every(
+          (option) =>
+            option.headersTimeout === (override ?? 45000) &&
+            option.bodyTimeout === (override ?? 45000),
+        ),
+      );
+    });

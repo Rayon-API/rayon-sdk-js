@@ -20,7 +20,7 @@ try {
     }),
   );
   assert.equal(packed.name, "rayon-sdk-js");
-  assert.equal(packed.version, "1.0.0");
+  assert.equal(packed.version, "1.0.1");
   for (const file of packed.files)
     assert.match(
       file.path,

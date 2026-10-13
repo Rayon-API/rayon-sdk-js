@@ -38,7 +38,7 @@ try {
 
 CommonJS: `const { RayonClient, generate, RayonError } = require('rayon-sdk-js')`.
 
-`new RayonClient(apiKey, { baseUrl?, timeoutMs? })` owns a persistent ordinary-TLS connection pool. Its defaults are `https://api.rayonapi.com` and a 150,000 ms total deadline. Close it explicitly. `client.generate(shape, { signal? })` and `client.usage({ signal? })` support `AbortSignal`. `generate(shape, apiKey, { baseUrl?, timeoutMs?, signal? })` is a one-shot helper that closes its pool. An optional `dispatcher` can be injected; an injected dispatcher remains owned by the caller.
+`new RayonClient(apiKey, { baseUrl?, timeoutMs? })` owns a persistent ordinary-TLS connection pool. Its defaults are `https://api.rayonapi.com` and a 45,000 ms total deadline. Close it explicitly. `client.generate(shape, { signal? })` and `client.usage({ signal? })` support `AbortSignal`. `generate(shape, apiKey, { baseUrl?, timeoutMs?, signal? })` is a one-shot helper that closes its pool. An optional `dispatcher` can be injected; an injected dispatcher remains owned by the caller.
 
 Supply exactly one of `scripts` and `material_ref`. `source_url`, `profile`, and all four `request` fields are always required. `body: null` means no target body; `''` means an explicit empty body. GET and HEAD require null; a supplied body requires a supported text content type. The body string is never parsed, reformatted, or converted to an object. `ShapeRequest`, `BrowserProfile`, `TargetRequest`, `ScriptMaterial`, and `ShapeResult` are exported types.
 
