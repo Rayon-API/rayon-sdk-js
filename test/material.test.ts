@@ -3,7 +3,7 @@ import { test, beforeEach, afterEach } from "node:test";
 import { inspect } from "node:util";
 import { createServer } from "node:http";
 import { gzipSync, brotliCompressSync, deflateSync } from "node:zlib";
-import { MockAgent, getGlobalDispatcher, setGlobalDispatcher } from "undici";
+import { MockAgent, errors, getGlobalDispatcher, setGlobalDispatcher } from "undici";
 import * as sdk from "../src/index.js";
 const key = "test-secret-key",
   origin = "https://api.rayonapi.com",
@@ -68,6 +68,34 @@ function errorKind(kind: string, statusCode?: number) {
     return true;
   };
 }
+
+for (const reference of ["short", "ref.with.punctuation", "a".repeat(129)]) {
+  test(`rejects a server reference that cannot be reused: ${reference.length} characters`, async () => {
+    reply(result({material_ref: reference}));
+    await assert.rejects(generate(shape(), key), errorKind("invalid_response"));
+  });
+}
+
+for (const failure of [new errors.HeadersTimeoutError(), new errors.BodyTimeoutError()]) {
+  test(`classifies native transport timeout ${failure.code}`, async () => {
+    mock.get(origin).intercept({path: "/v1/shape", method: "POST"}).replyWithError(failure);
+    await assert.rejects(generate(shape(), key), errorKind("timeout"));
+  });
+}
+test("native body timeout after headers preserves response metadata", async () => {
+  // Deliver headers before failing the response stream, rather than the request.
+  mock.dispatch = ((_options: any, handler: any) => {
+    handler.onConnect((error: Error) => handler.onError(error));
+    handler.onHeaders(200, [Buffer.from("x-request-id"), Buffer.from("req-body-timeout")], () => {}, "OK");
+    queueMicrotask(() => handler.onError(new errors.BodyTimeoutError()));
+    return true;
+  }) as typeof mock.dispatch;
+  await assert.rejects(generate(shape(), key), (error: unknown) => {
+    errorKind("timeout", 200)(error);
+    assert.equal((error as sdk.RayonError).requestId, "req-body-timeout");
+    return true;
+  });
+});
 beforeEach(() => {
   mock = new MockAgent();
   mock.disableNetConnect();

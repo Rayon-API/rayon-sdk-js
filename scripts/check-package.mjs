@@ -20,25 +20,19 @@ try {
     }),
   );
   assert.equal(packed.name, "rayon-sdk-js");
-  assert.equal(packed.version, "1.0.1");
-  for (const file of packed.files)
-    assert.match(
-      file.path,
-      /^(dist\/(esm|cjs)\/(index\.(js|d\.ts)|package\.json)|README\.md|RELEASE\.md|LICENSE|package\.json)$/,
-    );
-  for (const required of [
-    "dist/esm/index.js",
-    "dist/esm/index.d.ts",
-    "dist/cjs/index.js",
-    "dist/cjs/index.d.ts",
-    "dist/cjs/package.json",
-    "LICENSE",
-  ]) {
-    assert.ok(
-      packed.files.some((file) => file.path === required),
-      `Missing ${required}`,
-    );
-  }
+  assert.equal(packed.version, "1.0.2");
+  const modules = [
+    "index", "types", "errors", "json", "profile", "validation", "response", "client",
+  ];
+  const expected = [
+    "README.md", "RELEASE.md", "LICENSE", "package.json", "dist/cjs/package.json",
+  ];
+  for (const format of ["esm", "cjs"])
+    for (const module of modules)
+      for (const extension of ["js", "d.ts"])
+        expected.push(`dist/${format}/${module}.${extension}`);
+  // Exact equality rejects unexpected files and requires every runtime dependency.
+  assert.deepEqual(packed.files.map((file) => file.path).sort(), expected.sort());
   const installed = join(temp, "node_modules", "rayon-sdk-js");
   mkdirSync(installed, { recursive: true });
   execFileSync("tar", [
@@ -59,31 +53,58 @@ try {
     "dir",
   );
   writeFileSync(join(temp, "package.json"), '{"type":"module"}');
-  const smoke = `const assert = IMPORT_ASSERT; const { generate, validate_profile, RayonError } = IMPORT_SDK;\n(async () => { assert.equal(typeof generate, 'function'); assert.equal(typeof validate_profile, 'function'); assert.equal(validate_profile({ navigator: {vendor: '😀'.repeat(5000)} }).navigator.vendor.length, 10000); await assert.rejects(generate({}, 'key'), e => e instanceof RayonError && e.kind === 'validation'); })().catch(e => { console.error(e); process.exitCode = 1; });`;
+  const smoke = `IMPORT_ASSERT
+IMPORT_SDK
+assert.deepEqual(Object.keys(sdk).sort(), ['RayonClient', 'RayonError', 'generate', 'validate_profile']);
+const { RayonClient, generate, validate_profile, RayonError } = sdk;
+(async () => {
+  assert.equal(typeof RayonClient, 'function');
+  assert.equal(typeof generate, 'function');
+  assert.equal(typeof validate_profile, 'function');
+  assert.equal(typeof RayonError, 'function');
+  assert.equal(validate_profile({ navigator: {vendor: '😀'.repeat(5000)} }).navigator.vendor.length, 10000);
+  const client = new RayonClient('key');
+  await client.close();
+  await assert.rejects(generate({}, 'key'), e => e instanceof RayonError && e.kind === 'validation');
+})().catch(e => { console.error(e); process.exitCode = 1; });`;
   writeFileSync(
     join(temp, "smoke.cjs"),
-    smoke
-      .replace("IMPORT_ASSERT", "require('node:assert/strict')")
-      .replace("IMPORT_SDK", "require('rayon-sdk-js')"),
+    smoke.replace("IMPORT_ASSERT", "const assert = require('node:assert/strict');")
+      .replace("IMPORT_SDK", "const sdk = require('rayon-sdk-js');"),
   );
   writeFileSync(
     join(temp, "smoke.mjs"),
-    smoke
-      .replace(
-        "const assert = IMPORT_ASSERT;",
-        "import assert from 'node:assert/strict';",
-      )
-      .replace(
-        "const { generate, validate_profile, RayonError } = IMPORT_SDK;",
-        "import { generate, validate_profile, RayonError } from 'rayon-sdk-js';",
-      ),
+    smoke.replace("IMPORT_ASSERT", "import assert from 'node:assert/strict';")
+      .replace("IMPORT_SDK", "import * as sdk from 'rayon-sdk-js';"),
   );
   for (const file of ["smoke.mjs", "smoke.cjs"])
     execFileSync(process.execPath, [file], { cwd: temp, stdio: "inherit" });
   for (const extension of ["mts", "cts"]) {
     writeFileSync(
       join(temp, `consumer.${extension}`),
-      "import { generate, validate_profile, RayonError, type ShapeResult, type GenerateOptions } from 'rayon-sdk-js';\nconst options: GenerateOptions = { timeoutMs: 1000 };\nconst result: Promise<ShapeResult> = generate({ source_url: 'https://example.com', scripts: [{url: 'https://example.com/owned.js', source: '/* owned */'}], profile: {}, request: {url: 'https://example.com', method: 'GET', content_type: null, body: null} }, 'key', options);\nconst profile = validate_profile({ navigator: {vendor: '😀'.repeat(5000)} });\nconst error: string = new RayonError('timeout').kind;\n",
+      `import {
+  RayonClient, generate, validate_profile, RayonError,
+  type JsonValue, type BrowserProfile, type ScriptMaterial, type TargetRequest,
+  type ShapeRequest, type ShapeResult, type ClientOptions, type GenerateOptions,
+  type RequestOptions, type UsageResult, type RayonErrorKind, type ErrorMetadata,
+} from 'rayon-sdk-js';
+const json: JsonValue = { nested: [null, true, 1, 'value'] };
+const profile: BrowserProfile = validate_profile({ navigator: {vendor: '😀'.repeat(5000)} });
+const scripts: ScriptMaterial[] = [{url: 'https://example.com/owned.js', source: '/* owned */'}];
+const target: TargetRequest = {url: 'https://example.com', method: 'GET', content_type: null, body: null};
+const shape: ShapeRequest = {source_url: 'https://example.com', scripts, profile, request: target};
+const clientOptions: ClientOptions = { timeoutMs: 1000 };
+const options: GenerateOptions = { ...clientOptions, signal: new AbortController().signal };
+const requestOptions: RequestOptions = { signal: options.signal };
+const result: Promise<ShapeResult> = generate(shape, 'key', options);
+const client = new RayonClient('key', clientOptions);
+const generated: Promise<ShapeResult> = client.generate(shape, requestOptions);
+const usage: Promise<UsageResult> = client.usage(requestOptions);
+const kind: RayonErrorKind = 'timeout';
+const metadata: ErrorMetadata = {statusCode: 200, requestId: 'req-test', code: 'safe', retryAfter: '1'};
+const error: RayonError = new RayonError(kind, metadata);
+const errorKind: RayonErrorKind = error.kind;
+`,
     );
     execFileSync(
       process.execPath,
@@ -103,7 +124,7 @@ try {
     );
   }
   console.log(
-    `Verified ${packed.filename}: file allowlist, ESM/CommonJS imports, and both declaration exports.`,
+    `Verified ${packed.filename}: all 37 required files, four ESM/CommonJS runtime exports, and 12 public types in both declaration formats.`,
   );
 } finally {
   rmSync(temp, { recursive: true, force: true });
