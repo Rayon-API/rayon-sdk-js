@@ -1,10 +1,10 @@
 # Rayon JavaScript SDK
 
-Server-side JavaScript and TypeScript clients for `POST /v1/shape` and `GET /v1/usage`.
-Node.js 20.18.1+ is required. ESM, CommonJS and TypeScript declarations are included.
+Server-side JavaScript and TypeScript clients for RayonAPI Shape header generation and account usage.
+Requires Node.js 20.18.1+. Includes ESM, CommonJS and TypeScript declarations.
 Keep your API key on your server.
 
-[Documentation](https://docs.rayonapi.com/) · [Releases](https://github.com/Rayon-API/rayon-sdk-js/releases)
+[Documentation](https://docs.rayonapi.com/) · [Examples](https://github.com/Rayon-API/rayon-examples) · [Releases](https://github.com/Rayon-API/rayon-sdk-js/releases)
 
 ## Install
 
@@ -14,48 +14,53 @@ npm install rayon-sdk-js@^1
 
 ## Generate headers
 
-Prepare the full protection scripts from your authorized integration, in execution order.
-URLs supply context; the SDK and API do not download them.
+Prepare `shape.json` with the required raw protection JavaScript in execution order, including
+loaders and payloads where used. Include their context URLs, a current browser profile,
+JavaScript-visible cookies (`document_cookie`) and the exact target URL, method, content type
+and body string. See
+[material preparation](https://docs.rayonapi.com/material) and
+[profiles and sessions](https://docs.rayonapi.com/profiles-and-sessions).
+The SDK and API use URLs as context; they do not download scripts or send the target request.
 
-```js
+```ts
 import { readFile } from 'node:fs/promises';
-import { RayonClient } from 'rayon-sdk-js';
+import { RayonClient, type ShapeRequest } from 'rayon-sdk-js';
 
-const client = new RayonClient(process.env.RAYON_API_KEY);
+const shape: ShapeRequest = JSON.parse(await readFile('shape.json', 'utf8'));
+const client = new RayonClient(process.env.RAYON_API_KEY!, { timeoutMs: 45_000 });
 try {
-  const result = await client.generate({
-    source_url: 'https://example.com/page',
-    scripts: [{
-      url: 'https://example.com/assets/owned.js',
-      source: await readFile('owned.js', 'utf8'),
-    }],
-    profile: JSON.parse(await readFile('owned-profile.json', 'utf8')),
-    request: {
-      url: 'https://example.com/api/items',
-      method: 'POST',
-      content_type: 'application/json',
-      body: '{"item":1}',
-    },
-  });
-  // Apply result.headers with your own target client and session.
+  const result = await client.generate(shape);
+  const targetHeaders = { ...result.headers };
+  console.log(result.request_id);
+  // Apply targetHeaders using your target client and existing session.
 } finally {
   await client.close();
 }
 ```
 
-Use exactly one of `scripts` or a server-issued `material_ref`, with its original `source_url`.
-Capture a fresh profile from your browser; `validate_profile(profile)` provides offline validation.
-Keep the target URL, method, content type and body exact. GET/HEAD use `body: null`.
-See [material preparation](https://docs.rayonapi.com/material) and [profiles and sessions](https://docs.rayonapi.com/profiles-and-sessions).
+Apply all six `targetHeaders` to that exact request using your own target client and session.
+Keep its browser identity consistent with `result.profile_used` and retain the session's cookies.
+The response also includes `generation_ms`, `material_ref` and `material_expires_at`;
+it does not return target cookies or verify target acceptance.
 
-Persistent clients reuse unexpired material references. A failed reference is never automatically retried.
-To replace an invalid cached reference before expiry, use a fresh client with your saved scripts.
-No generation is automatically retried; admitted requests may consume account credit.
-Results contain six site-specific headers and material metadata. No target cookies are returned.
-Your target client maintains its own session and transport; generation does not guarantee target acceptance.
+Supply exactly one of `scripts` or a server-issued `material_ref` with its original `source_url`.
+All four `request` fields are required; GET/HEAD use `content_type: null`, `body: null`.
+Preserve body whitespace and encoding. Persistent clients reuse unexpired material references,
+while each call generates fresh headers from the supplied profile, request and cookies.
+If a cached reference fails, use a fresh client with the saved scripts.
 
-`client.usage()` reads account usage. `generate()` is a one-shot helper; `RayonError` exposes sanitized errors.
-CommonJS users can load `RayonClient` with `require('rayon-sdk-js')`.
-See the [API reference](https://docs.rayonapi.com/api-reference), [errors](https://docs.rayonapi.com/errors) and [migration guide](https://docs.rayonapi.com/migration).
+## Clients and errors
+
+The SDK authenticates with `Authorization: Bearer <API key>` and defaults to
+`https://api.rayonapi.com` with a 45,000 ms API request timeout.
+`client.generate(shape, { signal })` supports cancellation with `AbortSignal`.
+`client.usage()` reads account usage; `generate(shape, apiKey)` is a one-shot helper.
+CommonJS: `const { RayonClient } = require('rayon-sdk-js')`.
+
+`RayonError` exposes `kind`, sanitized `statusCode`, `requestId`, `code` and `retryAfter`.
+Kinds distinguish invalid input, authentication, rate limits, HTTP errors, invalid responses,
+network failures, timeouts and cancellation. No automatic retries. A client timeout may occur
+after successful generation; check history before retrying.
+See the [API reference](https://docs.rayonapi.com/api-reference) and [errors](https://docs.rayonapi.com/errors).
 
 [Support](mailto:support@rayonapi.com) · [Discord](https://discord.gg/TwhkJNyHWs) · [MIT license](LICENSE)
