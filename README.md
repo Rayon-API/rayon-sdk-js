@@ -1,6 +1,6 @@
 # Rayon JavaScript SDK
 
-Server-side JavaScript and TypeScript clients for RayonAPI Shape header generation and account usage.
+Server-side JavaScript and TypeScript clients for RayonAPI Shape header and form generation and account usage.
 Requires Node.js 20.18.1+. Includes ESM, CommonJS and TypeScript declarations.
 Keep your API key on your server.
 
@@ -24,9 +24,9 @@ The SDK and API use URLs as context; they do not download scripts or send the ta
 
 ```ts
 import { readFile } from 'node:fs/promises';
-import { RayonClient, type ShapeRequest } from 'rayon-sdk-js';
+import { RayonClient, type HeaderShapeRequest } from 'rayon-sdk-js';
 
-const shape: ShapeRequest = JSON.parse(await readFile('shape.json', 'utf8'));
+const shape: HeaderShapeRequest = JSON.parse(await readFile('shape.json', 'utf8'));
 const client = new RayonClient(process.env.RAYON_API_KEY!, { timeoutMs: 45_000 });
 try {
   const result = await client.generate(shape);
@@ -48,6 +48,46 @@ All four `request` fields are required; GET/HEAD use `content_type: null`, `body
 Preserve body whitespace and encoding. Persistent clients reuse unexpired material references,
 while each call generates fresh headers from the supplied profile, request and cookies.
 If a cached reference fails, use a fresh client with the saved scripts.
+
+## Generate form telemetry
+
+Requires SDK 1.1+. Set `mode: "form"` and provide a POST with
+`application/x-www-form-urlencoded`. `request.body` is the application form **before**
+telemetry insertion, including duplicate fields and current CSRF/session values.
+Optional `form: { id: "checkout", name: "checkout" }` describes the form selector.
+
+```ts
+import { RayonClient, type FormShapeRequest } from 'rayon-sdk-js';
+
+// preparedMaterial contains source_url, scripts (or material_ref), profile and cookies.
+const applicationBody = 'item=first&item=second&csrf=current%2Bvalue';
+const formShape: FormShapeRequest = {
+  ...preparedMaterial,
+  mode: 'form',
+  form: { id: 'checkout' },
+  request: {
+    url: 'https://example.com/submit',
+    method: 'POST',
+    content_type: 'application/x-www-form-urlencoded',
+    body: applicationBody,
+  },
+};
+const client = new RayonClient(process.env.RAYON_API_KEY!);
+try {
+  const result = await client.generate(formShape); // FormShapeResult; no headers
+  const targetBody = result.form_body + (applicationBody ? '&' + applicationBody : '');
+  // Submit targetBody using your existing target client and session.
+} finally {
+  await client.close();
+}
+```
+
+`form_fields` contains six raw values under the exact observed names and case;
+`form_body` contains only those telemetry fields, already encoded once in observed
+insertion order. Prepend it once to the original application body; do not encode it
+again, convert application fields to a dictionary, or send stale telemetry in the input.
+Retain the same cookies and browser identity for the target request. The SDK calls
+public `POST /v1/shape`; it does not use the private `/solve` tool.
 
 ## Clients and errors
 

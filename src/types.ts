@@ -72,14 +72,24 @@ export type MaterialInput =
   | { scripts: ScriptMaterial[]; material_ref?: never }
   | { scripts?: never; material_ref: string };
 
-export type ShapeRequest = {
+export interface FormMetadata {
+  id?: string;
+  name?: string;
+}
+
+type ShapeRequestBase = {
   source_url: string;
   profile: BrowserProfile;
   request: TargetRequest;
   document_cookie?: string;
 } & MaterialInput;
 
-export interface ShapeResult {
+export type HeaderShapeRequest = ShapeRequestBase & { mode?: "header"; form?: never };
+export type FormShapeRequest = ShapeRequestBase & { mode: "form"; form?: FormMetadata };
+export type ShapeRequest<Mode extends "header" | "form" = "header"> =
+  Mode extends "form" ? FormShapeRequest : HeaderShapeRequest;
+
+interface HeaderResult {
   headers: Record<string, string>;
   request_id: string;
   generation_ms: number;
@@ -87,6 +97,21 @@ export interface ShapeResult {
   material_ref: string;
   material_expires_at: string;
 }
+
+export interface FormShapeResult {
+  form_fields: Record<string, string>;
+  /** Telemetry only, already encoded once in observed insertion order. */
+  form_body: string;
+  request_id: string;
+  generation_ms: number;
+  profile_used: BrowserProfile;
+  material_ref: string;
+  material_expires_at: string;
+}
+
+/** Result transport follows the requested mode; existing users default to headers. */
+export type ShapeResult<Mode extends "header" | "form" = "header"> =
+  Mode extends "form" ? FormShapeResult : HeaderResult;
 
 export interface ClientOptions {
   baseUrl?: string;
