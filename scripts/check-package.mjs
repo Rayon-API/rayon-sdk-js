@@ -20,12 +20,12 @@ try {
     }),
   );
   assert.equal(packed.name, "rayon-sdk-js");
-  assert.equal(packed.version, "1.0.2");
+  assert.equal(packed.version, "1.0.3");
   const modules = [
     "index", "types", "errors", "json", "profile", "validation", "response", "client",
   ];
   const expected = [
-    "README.md", "RELEASE.md", "LICENSE", "package.json", "dist/cjs/package.json",
+    "README.md", "RELEASE.md", "CHANGELOG.md", "LICENSE", "package.json", "dist/cjs/package.json",
   ];
   for (const format of ["esm", "cjs"])
     for (const module of modules)
@@ -124,7 +124,7 @@ const errorKind: RayonErrorKind = error.kind;
     );
   }
   console.log(
-    `Verified ${packed.filename}: all 37 required files, four ESM/CommonJS runtime exports, and 12 public types in both declaration formats.`,
+    `Verified ${packed.filename}: all 38 required files, four ESM/CommonJS runtime exports, and 12 public types in both declaration formats.`,
   );
 } finally {
   rmSync(temp, { recursive: true, force: true });
