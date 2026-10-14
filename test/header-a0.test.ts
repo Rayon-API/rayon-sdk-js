@@ -78,3 +78,14 @@ test("optional a0 obeys the response byte limit", async () => {
   try { await assert.rejects(client.generate(shape()), invalidResponse); }
   finally { await client.close(); await mock.close(); }
 });
+
+
+for (const prefix of ["CuKtomer", "Cuſtomer", "Cuıstomer", "Cuİstomer"])
+  for (const optionalA0 of [false, true])
+    test(`header family requires ASCII tokens ${prefix}, optional a0 ${optionalA0}`, () => {
+      const suffixes = [..."abcdfz", ...(optionalA0 ? ["A0"] : [])];
+      const value = Object.fromEntries(suffixes.map(suffix => [
+        `${prefix}-${suffix}`, suffix === "d" ? "" : "value",
+      ]));
+      assert.throws(() => parseResult(result(value), {}, key), invalidResponse);
+    });
