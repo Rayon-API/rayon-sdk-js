@@ -1,8 +1,10 @@
 # Rayon JavaScript SDK
 
-Material-only server-side JavaScript and TypeScript clients for `POST /v1/shape` and `GET /v1/usage`. Requires Node.js 20.18.1+. ESM, CommonJS, and declarations are included. Keep API keys on your server.
+Server-side JavaScript and TypeScript clients for `POST /v1/shape` and `GET /v1/usage`.
+Node.js 20.18.1+ is required. ESM, CommonJS and TypeScript declarations are included.
+Keep your API key on your server.
 
-[API documentation](https://docs.rayonapi.com) · [Releases](RELEASE.md)
+[Documentation](https://docs.rayonapi.com/) · [Releases](https://github.com/Rayon-API/rayon-sdk-js/releases)
 
 ## Install
 
@@ -10,9 +12,10 @@ Material-only server-side JavaScript and TypeScript clients for `POST /v1/shape`
 npm install rayon-sdk-js@^1
 ```
 
-## Quickstart
+## Generate headers
 
-Prepare JavaScript material from files you own or are authorized to use. URLs provide execution context; neither SDK nor API downloads them. Preserve script order.
+Prepare the full protection scripts from your authorized integration, in execution order.
+URLs supply context; the SDK and API do not download them.
 
 ```js
 import { readFile } from 'node:fs/promises';
@@ -26,81 +29,33 @@ try {
       url: 'https://example.com/assets/owned.js',
       source: await readFile('owned.js', 'utf8'),
     }],
-    profile: { user_agent: 'your actual user agent', language: 'en-GB' },
+    profile: JSON.parse(await readFile('owned-profile.json', 'utf8')),
     request: {
       url: 'https://example.com/api/items',
       method: 'POST',
       content_type: 'application/json',
-      body: ' {"item": 1}\n', // Exact target body, including whitespace.
+      body: '{"item":1}',
     },
-    document_cookie: 'session=current', // Current JavaScript-visible cookies.
   });
-  const usage = await client.usage();
-  // Explicitly access result.headers and result.profile_used for your target client.
+  // Apply result.headers with your own target client and session.
 } finally {
   await client.close();
 }
 ```
 
-CommonJS: `const { RayonClient, generate, RayonError } = require('rayon-sdk-js')`.
+Use exactly one of `scripts` or a server-issued `material_ref`, with its original `source_url`.
+Capture a fresh profile from your browser; `validate_profile(profile)` provides offline validation.
+Keep the target URL, method, content type and body exact. GET/HEAD use `body: null`.
+See [material preparation](https://docs.rayonapi.com/material) and [profiles and sessions](https://docs.rayonapi.com/profiles-and-sessions).
 
-## Clients and cleanup
+Persistent clients reuse unexpired material references. A failed reference is never automatically retried.
+To replace an invalid cached reference before expiry, use a fresh client with your saved scripts.
+No generation is automatically retried; admitted requests may consume account credit.
+Results contain six site-specific headers and material metadata. No target cookies are returned.
+Your target client maintains its own session and transport; generation does not guarantee target acceptance.
 
-`new RayonClient(apiKey, { baseUrl?, timeoutMs? })` owns a persistent ordinary-TLS connection pool. Its defaults are `https://api.rayonapi.com` and a 45,000 ms total deadline. Close it explicitly.
+`client.usage()` reads account usage. `generate()` is a one-shot helper; `RayonError` exposes sanitized errors.
+CommonJS users can load `RayonClient` with `require('rayon-sdk-js')`.
+See the [API reference](https://docs.rayonapi.com/api-reference), [errors](https://docs.rayonapi.com/errors) and [migration guide](https://docs.rayonapi.com/migration).
 
-`client.generate(shape, { signal? })` and `client.usage({ signal? })` support `AbortSignal`. `generate(shape, apiKey, { baseUrl?, timeoutMs?, signal? })` is a one-shot helper that closes its pool. An optional `dispatcher` can be injected; an injected dispatcher remains owned by the caller.
-
-## Request
-
-Supply exactly one of `scripts` and `material_ref`. `source_url`, `profile`, and all four `request` fields are always required. `body: null` means no target body; `''` means an explicit empty body. GET and HEAD require null; a supplied body requires a supported text content type. The body string is never parsed, reformatted, or converted to an object. `ShapeRequest`, `BrowserProfile`, `TargetRequest`, `ScriptMaterial`, and `ShapeResult` are exported types.
-
-## Material reuse
-
-Persistent clients cache only material references, keyed by source URL and ordered script URLs and source. Each cache is scoped to one client, API key, and server and honors the server's `material_expires_at` expiry. Repeating the same material uses its unexpired reference. Profile, request, and document cookies are freshly copied per call. Expired references trigger a new upload on the next call supplying scripts; a failed reference request is never automatically retried. Explicit references also require their original source URL.
-
-## Profiles
-
-`validate_profile(profile)` is a public offline preflight helper. It enforces the same strict fields, alias conflicts, numeric ranges, and effective UTF-8 profile budget as generation, and returns a deep copy of the supplied fields. It neither fills defaults in the returned object nor sends a network request. Text limits count Unicode code points.
-
-`BrowserProfile` strictly supports `user_agent`, `platform`, `language`, `languages`, and nested `screen`, `window`, `webgl`, `canvas`, `navigator`. Conflicting aliases are rejected. `{}` selects server defaults. Screen/window dimensions, WebGL renderer/vendor, navigator identity, and a PNG `canvas.data_url` are supported. Effective `profile_used` omits canvas pixels.
-
-## Results
-
-A result contains `headers`, `request_id`, `generation_ms`, `profile_used`, and required `material_ref`/`material_expires_at`. Returned headers preserve the actual dynamic common prefix and complete `a`, `b`, `c`, `d`, `f`, `z` suffixes; `d` may be empty. Prefixes are HTTP tokens of at most 128 characters and header values contain visible ASCII only. Generation does not assert target acceptance. No cookies, status, or internal method are returned. Node inspection redacts headers, profile data, and references; explicit field access and JSON serialization retain result values.
-
-## Limits and transport
-
-| Input or response | Limit |
-| --- | --- |
-| Serialized request JSON | 4 MiB |
-| Scripts | 16 |
-| UTF-8 script source | 2 MiB per script; 3 MiB total |
-| UTF-8 target body | 256 KiB |
-| Effective UTF-8 profile JSON | 64 KiB, including defaults and alias expansion |
-| Document cookies | 16 KiB |
-| API response | 256 KiB each for wire and decoded bytes |
-
-Gzip, deflate, and Brotli decoding are bounded. The total deadline includes response streaming.
-
-TLS certificate verification stays enabled. Redirects and environment proxies are disabled. Custom bases require HTTPS except local HTTP on `localhost`, `127.0.0.1`, or `[::1]`; credentials, fragments, and base queries are refused. API transport does not impersonate a browser.
-
-## Errors
-
-`RayonError` exposes `kind`, sanitized `statusCode`, `requestId`, `code`, and `retryAfter`. Raw server messages and transport causes are discarded.
-
-Kinds are `validation`, `auth`, `rate_limit`, `migration`, `http`, `invalid_response`, `network`, `timeout`, and `aborted`. HTTP 410 yields `migration`; 429 yields `rate_limit` with a validated Retry-After seconds or HTTP-date string. No request is retried automatically: admitted generations can consume quota.
-
-## Migration from 0.1
-
-Version 1.0 removes URL-only `solve`, `SolveOptions`, and `SolveResult`. Replace them with `generate`/`RayonClient`, caller-prepared material, a fresh browser profile, and exact target request context. Use `generation_ms`, `headers`, and `profile_used` in place of duration/status/method/cookie handling. Published 0.1 packages and tags remain unchanged and target the retired API.
-
-## Development
-
-```sh
-npm ci
-npm test
-npm run build
-npm run test:package
-```
-
-See [RELEASE.md](RELEASE.md) for release checks. Licensed under [MIT](LICENSE).
+[Support](mailto:support@rayonapi.com) · [Discord](https://discord.gg/TwhkJNyHWs) · [MIT license](LICENSE)
