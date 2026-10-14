@@ -38,7 +38,9 @@ try {
 }
 ```
 
-Apply all six `targetHeaders` to that exact request using your own target client and session.
+Apply every returned `targetHeaders` to that exact request using your own target client and session.
+Header mode returns the six required same-family `a`, `b`, `c`, `d`, `f`, `z` headers
+and may include a fresh same-family `a0` header. Preserve all returned names, case and values.
 Keep its browser identity consistent with `result.profile_used` and retain the session's cookies.
 The response also includes `generation_ms`, `material_ref` and `material_expires_at`;
 it does not return target cookies or verify target acceptance.
@@ -82,7 +84,8 @@ try {
 }
 ```
 
-`form_fields` contains six raw values under the exact observed names and case;
+`form_fields` contains exactly six raw values under the exact observed names and case;
+a larger `a` value remains one field and does not add `a0`.
 `form_body` contains only those telemetry fields, already encoded once in observed
 insertion order. Prepend it once to the original application body; do not encode it
 again, convert application fields to a dictionary, or send stale telemetry in the input.

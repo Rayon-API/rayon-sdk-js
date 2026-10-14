@@ -86,3 +86,17 @@ test('form field names must end exactly at the suffix', () => {
   value.form_body = new URLSearchParams(fields).toString();
   assert.throws(() => parseResult(value, {}, key, 'form'), kind('invalid_response'));
 });
+
+
+test('form keeps exactly six fields with a larger a value', () => {
+  const value = result();
+  value.form_fields.ExactBasea = 'x'.repeat(16384);
+  value.form_body = new URLSearchParams(value.form_fields).toString();
+  const output = parseResult(value, {}, key, 'form');
+  assert.ok('form_fields' in output);
+  assert.equal(Object.keys(output.form_fields).length, 6);
+  assert.equal(output.form_fields.ExactBasea, 'x'.repeat(16384));
+  value.form_fields.ExactBasea0 = 'supplement';
+  value.form_body = new URLSearchParams(value.form_fields).toString();
+  assert.throws(() => parseResult(value, {}, key, 'form'), kind('invalid_response'));
+});

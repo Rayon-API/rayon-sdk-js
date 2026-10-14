@@ -10,13 +10,13 @@ import { copyJson, isRecord } from "./json.js";
 import { safeFormFields } from "./validation.js";
 
 export function safeHeaders(value: unknown): Record<string, string> {
-  if (!isRecord(value) || Object.keys(value).length !== 6)
+  if (!isRecord(value) || ![6, 7].includes(Object.keys(value).length))
     throw new Error("Invalid header set");
   const copied: Record<string, string> = Object.create(null);
   const suffixes = new Set<string>();
   let prefix: string | undefined;
   for (const [name, content] of Object.entries(value)) {
-    const match = /^([!#$%&'*+\-.^_`|~0-9a-z]{1,128})-([abcdfz])$/i.exec(name);
+    const match = /^([!#$%&'*+\-.^_`|~0-9a-z]{1,128})-(a0|[abcdfz])$/i.exec(name);
     if (!match || typeof content !== "string" || /[^\x21-\x7e]/.test(content))
       throw new Error("Invalid header");
     const family = match[1].toLowerCase();
@@ -31,6 +31,8 @@ export function safeHeaders(value: unknown): Record<string, string> {
     suffixes.add(suffix);
     copied[name] = content;
   }
+  if (![..."abcdfz"].every(suffix => suffixes.has(suffix)))
+    throw new Error("Incomplete header family");
   return copied;
 }
 
