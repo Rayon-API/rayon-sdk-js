@@ -3,6 +3,9 @@ import { createHash } from "node:crypto";
 import type {
   ShapeRequest,
   ShapeResult,
+  FormShapeResult,
+  HeaderShapeRequest,
+  FormShapeRequest,
   ScriptMaterial,
   ClientOptions,
   RequestOptions,
@@ -71,10 +74,19 @@ export class RayonClient {
     this.#cache.clear();
     await this.#ownedAgent?.close();
   }
+  generate(
+    shape: HeaderShapeRequest, options?: RequestOptions,
+  ): Promise<ShapeResult>;
+  generate(
+    shape: FormShapeRequest, options?: RequestOptions,
+  ): Promise<FormShapeResult>;
+  generate(
+    shape: ShapeRequest<"header" | "form">, options?: RequestOptions,
+  ): Promise<ShapeResult | FormShapeResult>;
   async generate(
-    shape: ShapeRequest,
+    shape: ShapeRequest<"header" | "form">,
     options: RequestOptions = {},
-  ): Promise<ShapeResult> {
+  ): Promise<ShapeResult | FormShapeResult> {
     const body = validateShape(shape);
     let cacheKey: string | undefined;
     if (body.scripts) {
@@ -98,7 +110,7 @@ export class RayonClient {
       body,
       options,
     );
-    const result = parseResult(value, metadata, this.#apiKey);
+    const result = parseResult(value, metadata, this.#apiKey, body.mode ?? "header");
     if (cacheKey && result.material_ref && result.material_expires_at) {
       const expires = Date.parse(result.material_expires_at);
       if (expires > Date.now()) {
@@ -121,7 +133,7 @@ export class RayonClient {
   async #send(
     method: "GET" | "POST",
     path: string,
-    body: ShapeRequest | undefined,
+    body: ShapeRequest<"header" | "form"> | undefined,
     options: RequestOptions,
   ): Promise<[unknown, ErrorMetadata]> {
     if (
@@ -160,6 +172,7 @@ export class RayonClient {
           response.body,
           response.headers["content-encoding"],
           controller.signal,
+          body?.mode === "form",
         );
       } catch (error) {
         if (controller.signal.aborted || isTransportTimeout(error))
@@ -202,11 +215,20 @@ export class RayonClient {
   }
 }
 
+export function generate(
+  shape: HeaderShapeRequest, apiKey: string, options?: GenerateOptions,
+): Promise<ShapeResult>;
+export function generate(
+  shape: FormShapeRequest, apiKey: string, options?: GenerateOptions,
+): Promise<FormShapeResult>;
+export function generate(
+  shape: ShapeRequest<"header" | "form">, apiKey: string, options?: GenerateOptions,
+): Promise<ShapeResult | FormShapeResult>;
 export async function generate(
-  shape: ShapeRequest,
+  shape: ShapeRequest<"header" | "form">,
   apiKey: string,
   options: GenerateOptions = {},
-): Promise<ShapeResult> {
+): Promise<ShapeResult | FormShapeResult> {
   const client = new RayonClient(apiKey, options);
   try {
     return await client.generate(shape, { signal: options.signal });

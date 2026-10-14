@@ -39,3 +39,9 @@ Version 1.0 is a breaking migration to the material-only API. Verify README migr
 Version 1.0.2 preserves the four runtime exports and 12 public types across both module formats while splitting the implementation into eight modules. Check the exact tarball allowlist, reusable response references, and native transport timeouts before release. Run the package audit on Node.js 20.18.1 and Node.js 22 as well as the publishing toolchain.
 
 See [CHANGELOG.md](CHANGELOG.md) for release notes.
+
+Version 1.1.0 adds optional form mode. Verify strict encoding, application duplicates,
+exact-case form families, telemetry-only body composition, transport mismatch rejection,
+material reuse, and new public form types before publishing. Verify the six required
+headers with optional fresh same-family `a0`, original names and values, duplicate and
+incomplete-family rejection, and exactly six form fields with a larger `a` value.

@@ -20,7 +20,7 @@ try {
     }),
   );
   assert.equal(packed.name, "rayon-sdk-js");
-  assert.equal(packed.version, "1.0.3");
+  assert.equal(packed.version, "1.1.0");
   const modules = [
     "index", "types", "errors", "json", "profile", "validation", "response", "client",
   ];
@@ -85,7 +85,7 @@ const { RayonClient, generate, validate_profile, RayonError } = sdk;
       `import {
   RayonClient, generate, validate_profile, RayonError,
   type JsonValue, type BrowserProfile, type ScriptMaterial, type TargetRequest,
-  type ShapeRequest, type ShapeResult, type ClientOptions, type GenerateOptions,
+  type ShapeRequest, type ShapeResult, type FormShapeRequest, type HeaderShapeRequest, type FormShapeResult, type FormMetadata, type ClientOptions, type GenerateOptions,
   type RequestOptions, type UsageResult, type RayonErrorKind, type ErrorMetadata,
 } from 'rayon-sdk-js';
 const json: JsonValue = { nested: [null, true, 1, 'value'] };
@@ -100,6 +100,21 @@ const result: Promise<ShapeResult> = generate(shape, 'key', options);
 const client = new RayonClient('key', clientOptions);
 const generated: Promise<ShapeResult> = client.generate(shape, requestOptions);
 const usage: Promise<UsageResult> = client.usage(requestOptions);
+const formMetadata: FormMetadata = { id: 'checkout' };
+const formShape: FormShapeRequest = { source_url: 'https://example.com', scripts, profile, mode: 'form', form: formMetadata, request: { ...target, method: 'POST', content_type: 'application/x-www-form-urlencoded', body: '' } };
+const formResult: Promise<ShapeResult<"form">> = generate(formShape, 'key', options);
+const clientFormResult: Promise<FormShapeResult> = client.generate(formShape, requestOptions);
+function existingHeaderWrapper(value: ShapeRequest): Promise<ShapeResult> { return client.generate(value); }
+const headerShape: HeaderShapeRequest = shape;
+const headerResult: Promise<ShapeResult> = client.generate(headerShape);
+const dynamicShape: ShapeRequest<"header" | "form"> = Math.random() > 0.5 ? headerShape : formShape;
+const dynamicResult: Promise<ShapeResult | FormShapeResult> = client.generate(dynamicShape);
+formResult.then(value => {
+  const body: string = value.form_body;
+  const fields: Record<string, string> = value.form_fields;
+  // @ts-expect-error form responses have no header transport
+  value.headers;
+});
 const kind: RayonErrorKind = 'timeout';
 const metadata: ErrorMetadata = {statusCode: 200, requestId: 'req-test', code: 'safe', retryAfter: '1'};
 const error: RayonError = new RayonError(kind, metadata);
@@ -124,7 +139,7 @@ const errorKind: RayonErrorKind = error.kind;
     );
   }
   console.log(
-    `Verified ${packed.filename}: all 38 required files, four ESM/CommonJS runtime exports, and 12 public types in both declaration formats.`,
+    `Verified ${packed.filename}: all 38 required files, four ESM/CommonJS runtime exports, and 16 public types in both declaration formats.`,
   );
 } finally {
   rmSync(temp, { recursive: true, force: true });

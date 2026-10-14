@@ -1,19 +1,22 @@
 import type { Dispatcher } from "undici";
-import type { ShapeResult, ErrorMetadata, BrowserProfile } from "./types.js";
+import type {
+  ShapeResult, FormShapeResult, ErrorMetadata, BrowserProfile,
+} from "./types.js";
 import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { createGunzip, createInflate, createBrotliDecompress } from "node:zlib";
 import { RayonError } from "./errors.js";
 import { copyJson, isRecord } from "./json.js";
+import { safeFormFields } from "./validation.js";
 
 export function safeHeaders(value: unknown): Record<string, string> {
-  if (!isRecord(value) || Object.keys(value).length !== 6)
+  if (!isRecord(value) || ![6, 7].includes(Object.keys(value).length))
     throw new Error("Invalid header set");
   const copied: Record<string, string> = Object.create(null);
   const suffixes = new Set<string>();
   let prefix: string | undefined;
   for (const [name, content] of Object.entries(value)) {
-    const match = /^([!#$%&'*+\-.^_`|~0-9a-z]{1,128})-([abcdfz])$/i.exec(name);
+    const match = /^([!#$%&'*+\-.^_`|~0-9a-z]{1,128})-(a0|[abcdfz])$/i.exec(name);
     if (!match || typeof content !== "string" || /[^\x21-\x7e]/.test(content))
       throw new Error("Invalid header");
     const family = match[1].toLowerCase();
@@ -28,6 +31,8 @@ export function safeHeaders(value: unknown): Record<string, string> {
     suffixes.add(suffix);
     copied[name] = content;
   }
+  if (![..."abcdfz"].every(suffix => suffixes.has(suffix)))
+    throw new Error("Incomplete header family");
   return copied;
 }
 
@@ -37,6 +42,7 @@ export async function readResponse(
   body: Dispatcher.ResponseData["body"],
   encoding: string | string[] | undefined,
   signal: AbortSignal,
+  strictUtf8 = false,
 ): Promise<unknown> {
   const bounded = () => {
     let bytes = 0;
@@ -72,7 +78,11 @@ export async function readResponse(
   }
   // Both wire bytes and decoded bytes are bounded; abort also cancels decoding.
   await pipeline([...stages, collector], { signal });
-  return JSON.parse(Buffer.concat(chunks).toString("utf8")) as unknown;
+  const bytes = Buffer.concat(chunks);
+  const text = strictUtf8
+    ? new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes)
+    : bytes.toString("utf8");
+  return JSON.parse(text) as unknown;
 }
 
 export function safeId(value: unknown, key: string): string | undefined {
@@ -87,7 +97,8 @@ export function parseResult(
   value: unknown,
   metadata: ErrorMetadata,
   key: string,
-): ShapeResult {
+  mode: "header" | "form" = "header",
+): ShapeResult | FormShapeResult {
   try {
     if (
       !isRecord(value) ||
@@ -112,8 +123,21 @@ export function parseResult(
         !Number.isFinite(Date.parse(value.material_expires_at)))
     )
       throw new Error();
-    const result: ShapeResult = {
-      headers: safeHeaders(value.headers),
+    let transport:
+      | { headers: Record<string, string> }
+      | { form_fields: Record<string, string>; form_body: string };
+    if (mode === "form") {
+      if (Object.hasOwn(value, "headers")) throw new Error();
+      transport = {
+        form_fields: safeFormFields(value.form_fields, value.form_body),
+        form_body: value.form_body as string,
+      };
+    } else {
+      if (Object.hasOwn(value, "form_fields") || Object.hasOwn(value, "form_body")) throw new Error();
+      transport = { headers: safeHeaders(value.headers) };
+    }
+    const result: ShapeResult | FormShapeResult = {
+      ...transport,
       request_id: value.request_id as string,
       generation_ms: value.generation_ms as number,
       profile_used: copyJson(value.profile_used) as BrowserProfile,
@@ -124,7 +148,9 @@ export function parseResult(
       value: () => ({
         request_id: result.request_id,
         generation_ms: result.generation_ms,
-        headers: "[REDACTED]",
+        ...(mode === "form"
+          ? { form_fields: "[REDACTED]", form_body: "[REDACTED]" }
+          : { headers: "[REDACTED]" }),
         profile_used: "[REDACTED]",
         material_ref: "[REDACTED]",
         material_expires_at: result.material_expires_at,
@@ -152,14 +178,14 @@ export function responseMetadata(
       safeId(error?.request_id, key) ?? safeId(headers["x-request-id"], key),
     retryAfter:
       typeof retry === "string" &&
-      !retry.includes(key) &&
-      (/^\d{1,10}$/.test(retry) || new Date(retry).toUTCString() === retry)
+        !retry.includes(key) &&
+        (/^\d{1,10}$/.test(retry) || new Date(retry).toUTCString() === retry)
         ? retry
         : undefined,
     code:
       typeof code === "string" &&
-      !code.includes(key) &&
-      /^[a-z][a-z0-9_]{0,63}$/.test(code)
+        !code.includes(key) &&
+        /^[a-z][a-z0-9_]{0,63}$/.test(code)
         ? code
         : undefined,
   };

@@ -25,7 +25,102 @@ export function validUrl(value: unknown): value is string {
   }
 }
 
-export function validateShape(value: ShapeRequest): ShapeRequest {
+const FORM_NAME = /^([!#$%&'*+\-.^_`|~0-9A-Za-z]{1,128})([abcdfz])$/;
+
+export function formPairs(body: unknown): [string, string][] {
+  if (
+    typeof body !== "string" ||
+    Buffer.byteLength(body) > 256 * 1024 ||
+    Buffer.from(body).toString("utf8") !== body ||
+    /%(?![0-9A-Fa-f]{2})/.test(body)
+  ) throw new Error();
+  const pairs: [string, string][] = [];
+  for (const part of body.split("&")) {
+    if (!part) continue;
+    const index = part.indexOf("=");
+    const rawKey = index < 0 ? part : part.slice(0, index);
+    const rawValue = index < 0 ? "" : part.slice(index + 1);
+    const key = decodeURIComponent(rawKey.replace(/\+/g, " "));
+    const value = decodeURIComponent(rawValue.replace(/\+/g, " "));
+    if (
+      key.includes("\0") || value.includes("\0") || Buffer.byteLength(key) > 256
+    ) throw new Error();
+    pairs.push([key, value]);
+    if (pairs.length > 1024) throw new Error();
+  }
+  return pairs;
+}
+
+function validateFormRequest(
+  v: Record<string, unknown>, r: Record<string, unknown>,
+) {
+  const mode = Object.hasOwn(v, "mode") ? v.mode : "header";
+  if (mode !== "header" && mode !== "form") throw new Error();
+  if (mode === "header") {
+    if (Object.hasOwn(v, "form")) throw new Error();
+    return;
+  }
+  if (
+    r.method !== "POST" ||
+    typeof r.content_type !== "string" ||
+    !/^application\/x-www-form-urlencoded(?:\s*;\s*charset\s*=\s*(?:"(?:utf-8|utf8)"|utf-8|utf8))?\s*$/i.test(r.content_type)
+  ) throw new Error();
+  if (Object.hasOwn(v, "form")) {
+    if (
+      !isRecord(v.form) ||
+      Object.keys(v.form).some(k => !["id", "name"].includes(k))
+    ) throw new Error();
+    for (const value of Object.values(v.form)) {
+      if (
+        typeof value !== "string" ||
+        Array.from(value).length > 256 ||
+        Buffer.from(value).toString("utf8") !== value ||
+        /[\u0000-\u001f\u007f]/.test(value)
+      ) throw new Error();
+    }
+  }
+  const families = new Map<string, Set<string>>();
+  for (const [name] of formPairs(r.body)) {
+    const match = FORM_NAME.exec(name);
+    if (match) {
+      const slots = families.get(match[1]) ?? new Set<string>();
+      slots.add(match[2]);
+      families.set(match[1], slots);
+    }
+  }
+  if ([...families.values()].some(slots => slots.size === 6)) throw new Error();
+}
+
+export function safeFormFields(
+  fields: unknown, body: unknown,
+): Record<string, string> {
+  if (!isRecord(fields) || Object.keys(fields).length !== 6) throw new Error();
+  const copied: Record<string, string> = Object.create(null);
+  const families = new Set<string>();
+  const slots = new Set<string>();
+  for (const [name, value] of Object.entries(fields)) {
+    const match = FORM_NAME.exec(name);
+    if (
+      !match || typeof value !== "string" || Buffer.byteLength(value) > 16384 ||
+      /[\u0000-\u001f\u007f]/.test(value) || (match[2] !== "d" && !value)
+    ) throw new Error();
+    // URLSearchParams would silently replace invalid Unicode surrogates.
+    if (Buffer.from(value).toString("utf8") !== value) throw new Error();
+    families.add(match[1]);
+    slots.add(match[2]);
+    copied[name] = value;
+  }
+  if (
+    families.size !== 1 || slots.size !== 6 || typeof body !== "string" ||
+    Buffer.byteLength(body) > 256 * 1024 ||
+    new URLSearchParams(Object.entries(copied)).toString() !== body
+  ) throw new Error();
+  return copied;
+}
+
+export function validateShape(
+  value: ShapeRequest<"header" | "form">,
+): ShapeRequest<"header" | "form"> {
   try {
     const v = copyJson(value) as Record<string, unknown>;
     if (
@@ -40,6 +135,8 @@ export function validateShape(value: ShapeRequest): ShapeRequest {
             "profile",
             "request",
             "document_cookie",
+            "mode",
+            "form",
           ].includes(k),
       ) ||
       !validUrl(v.source_url) ||
@@ -119,6 +216,7 @@ export function validateShape(value: ShapeRequest): ShapeRequest {
         /^(image|audio|video|multipart)\//i.test(r.content_type as string))
     )
       throw new Error();
+    validateFormRequest(v, r);
     if (
       Object.hasOwn(v, "document_cookie") &&
       (typeof v.document_cookie !== "string" ||
@@ -128,7 +226,7 @@ export function validateShape(value: ShapeRequest): ShapeRequest {
       throw new Error();
     if (Buffer.byteLength(JSON.stringify(v)) > 4 * 1024 * 1024)
       throw new Error();
-    return v as unknown as ShapeRequest;
+    return v as unknown as ShapeRequest<"header" | "form">;
   } catch {
     throw new RayonError("validation");
   }
