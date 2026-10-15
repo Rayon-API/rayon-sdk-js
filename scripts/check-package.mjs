@@ -20,7 +20,7 @@ try {
     }),
   );
   assert.equal(packed.name, "rayon-sdk-js");
-  assert.equal(packed.version, "1.1.0");
+  assert.equal(packed.version, "1.1.1");
   const modules = [
     "index", "types", "errors", "json", "profile", "validation", "response", "client",
   ];

@@ -193,7 +193,7 @@ for (const status of [301, 307, 401, 410, 429, 503])
     reply(
       {
         error: {
-          code: status === 410 ? "api_retired" : "rate_limited",
+          code: "http_error",
           message: key + " private",
           request_id: "req-safe",
         },
@@ -207,11 +207,14 @@ for (const status of [301, 307, 401, 410, 429, 503])
           ? "auth"
           : status === 429
             ? "rate_limit"
-            : status === 410
-              ? "migration"
-              : "http",
+            : "http",
         status,
       )(e);
+      if (status === 410)
+        assert.equal(
+          (e as Error).message,
+          "Rayon API returned an unsuccessful HTTP response.",
+        );
       assert.equal((e as sdk.RayonError).requestId, "req-safe");
       assert.equal((e as sdk.RayonError).retryAfter, "12");
       assert.ok(!(e as Error).message.includes("private"));
@@ -302,8 +305,10 @@ test("stream deadline includes slow response body and closes stream", async () =
     await new Promise<void>((r) => server.close(() => r()));
   }
 });
-test("retired solve not exported", () => {
-  assert.equal("solve" in sdk, false);
+test("current runtime exports are complete", () => {
+  assert.deepEqual(Object.keys(sdk).sort(), [
+    "RayonClient", "RayonError", "generate", "validate_profile",
+  ]);
 });
 test("client closes its owned connection pool", async () => {
   setGlobalDispatcher(previous);
