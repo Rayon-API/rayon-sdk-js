@@ -5,8 +5,7 @@ const messages: Record<RayonErrorKind, string> = {
   auth: "Rayon API denied authentication or access.",
   rate_limit: "Rayon API request limit reached.",
   http: "Rayon API returned an unsuccessful HTTP response.",
-  migration:
-    "This API is retired. Migrate to POST /v1/shape with caller-supplied material.",
+  migration: "Rayon API returned an unsuccessful HTTP response.",
   invalid_response: "Rayon API returned an invalid response.",
   network: "Rayon API request could not be completed.",
   timeout: "Rayon API request timed out.",

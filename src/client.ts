@@ -195,9 +195,7 @@ export class RayonClient {
             ? "auth"
             : response.statusCode === 429
               ? "rate_limit"
-              : response.statusCode === 410
-                ? "migration"
-                : "http",
+              : "http",
           metadata,
         );
       return [value, metadata];

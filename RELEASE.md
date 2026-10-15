@@ -34,7 +34,7 @@ For a later release, update `package.json` and `package-lock.json` to the same n
 
 Prereleases must use an appropriate npm dist-tag; the supplied workflow intentionally rejects GitHub prereleases. No registry publish or remote push is performed by local tests or builds.
 
-Version 1.0 is a breaking migration to the material-only API. Verify README migration guidance, exact target body preservation, lifecycle and cancellation, strict size/profile limits, safe error envelopes, expiry-scoped references, no automatic POST retries, and ESM/CommonJS type exports. Keep published 0.1 packages and release tags immutable. Never include customer scripts, captured material, credentials, or private fixtures in packed files.
+Verify current API guidance, exact target body preservation, lifecycle and cancellation, strict size/profile limits, safe error envelopes, expiry-scoped references, no automatic POST retries, and ESM/CommonJS type exports. Keep published packages and release tags immutable. Never include customer scripts, captured material, credentials, or private fixtures in packed files.
 
 Version 1.0.2 preserves the four runtime exports and 12 public types across both module formats while splitting the implementation into eight modules. Check the exact tarball allowlist, reusable response references, and native transport timeouts before release. Run the package audit on Node.js 20.18.1 and Node.js 22 as well as the publishing toolchain.
 
