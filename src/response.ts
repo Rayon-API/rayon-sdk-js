@@ -173,6 +173,7 @@ export function responseMetadata(
     isRecord(value) && isRecord(value.error) ? value.error : undefined;
   const code = error?.code;
   return {
+    retryable: typeof error?.retryable === "boolean" ? error.retryable : undefined,
     statusCode,
     requestId:
       safeId(error?.request_id, key) ?? safeId(headers["x-request-id"], key),
