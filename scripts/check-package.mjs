@@ -4,6 +4,7 @@ import {
   mkdirSync,
   mkdtempSync,
   rmSync,
+  readFileSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -20,7 +21,7 @@ try {
     }),
   );
   assert.equal(packed.name, "rayon-sdk-js");
-  assert.equal(packed.version, "1.1.1");
+  assert.equal(packed.version, JSON.parse(readFileSync(join(root, "package.json"), "utf8")).version);
   const modules = [
     "index", "types", "errors", "json", "profile", "validation", "response", "client",
   ];
@@ -116,7 +117,7 @@ formResult.then(value => {
   value.headers;
 });
 const kind: RayonErrorKind = 'timeout';
-const metadata: ErrorMetadata = {statusCode: 200, requestId: 'req-test', code: 'safe', retryAfter: '1'};
+const metadata: ErrorMetadata = {statusCode: 200, requestId: 'req-test', code: 'safe', retryAfter: '1', retryable: false};
 const error: RayonError = new RayonError(kind, metadata);
 const errorKind: RayonErrorKind = error.kind;
 `,

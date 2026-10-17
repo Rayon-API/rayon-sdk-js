@@ -146,6 +146,7 @@ export type RayonErrorKind =
   | "aborted";
 
 export interface ErrorMetadata {
+  retryable?: boolean;
   statusCode?: number;
   requestId?: string;
   retryAfter?: string;

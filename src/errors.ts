@@ -18,6 +18,7 @@ export class RayonError extends Error {
   readonly requestId?: string;
   readonly retryAfter?: string;
   readonly code?: string;
+  readonly retryable?: boolean;
   constructor(kind: RayonErrorKind, metadata: ErrorMetadata = {}) {
     super(messages[kind]);
     this.name = "RayonError";
@@ -26,6 +27,7 @@ export class RayonError extends Error {
     this.requestId = metadata.requestId;
     this.retryAfter = metadata.retryAfter;
     this.code = metadata.code;
+    this.retryable = metadata.retryable;
   }
 }
 
