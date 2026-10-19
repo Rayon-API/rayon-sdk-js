@@ -2,11 +2,13 @@ import type { RayonErrorKind, ErrorMetadata } from "./types.js";
 
 import { errorCatalog } from "./error-catalog.js";
 
-export function trustedGuidance(code?: string, reason?: string, domain?: string) {
+const historyAction = "Check request history before sending another request. Contact support with the request ID if it remains unclear.";
+
+export function trustedGuidance(code?: string, reason?: string, domain?: string, retryable?: boolean, billingStatus?: unknown) {
   if (typeof reason !== "string" || !Object.hasOwn(errorCatalog, reason)) return undefined;
   const entry = errorCatalog[reason as keyof typeof errorCatalog];
   if (!(entry.codes as readonly string[]).includes(code ?? "")) return undefined;
-  return { reason, message: entry.message.replace("{domain}", safeDomain(domain) ?? "this domain"), action: entry.action };
+  return { reason, message: entry.message.replace("{domain}", safeDomain(domain) ?? "this domain"), action: entry.retryable && (safeBillingStatus(billingStatus) !== "not_charged" || retryable === false) ? historyAction : entry.action };
 }
 
 const messages: Record<RayonErrorKind, string> = {
@@ -34,7 +36,7 @@ export class RayonError extends Error {
   readonly field?: string;
   readonly billingStatus?: "not_charged" | "pending" | "unknown";
   constructor(kind: RayonErrorKind, metadata: ErrorMetadata = {}) {
-    const guidance = trustedGuidance(metadata.code, metadata.reason, metadata.domain);
+    const guidance = trustedGuidance(metadata.code, metadata.reason, metadata.domain, metadata.retryable, metadata.billingStatus);
     super(guidance?.message ?? messages[kind]);
     this.name = "RayonError";
     this.kind = kind;
@@ -47,7 +49,7 @@ export class RayonError extends Error {
     this.action = guidance?.action;
     this.domain = safeDomain(metadata.domain);
     this.field = safeField(metadata.field);
-    this.billingStatus = metadata.billingStatus;
+    this.billingStatus = safeBillingStatus(metadata.billingStatus);
   }
 }
 
@@ -79,4 +81,8 @@ export function safeField(value: unknown, key?: string): string | undefined {
     !/[^a-zA-Z0-9_.]/.test(value) &&
     !value.split(".").some(part => ["__proto__", "constructor", "prototype"].includes(part))
     ? value : undefined;
+}
+
+export function safeBillingStatus(value: unknown): ErrorMetadata["billingStatus"] {
+  return value === "not_charged" || value === "pending" || value === "unknown" ? value : undefined;
 }
