@@ -23,7 +23,7 @@ try {
   assert.equal(packed.name, "rayon-sdk-js");
   assert.equal(packed.version, JSON.parse(readFileSync(join(root, "package.json"), "utf8")).version);
   const modules = [
-    "index", "types", "errors", "json", "profile", "validation", "response", "client",
+    "index", "types", "error-catalog", "errors", "json", "profile", "validation", "response", "client",
   ];
   const expected = [
     "README.md", "RELEASE.md", "CHANGELOG.md", "LICENSE", "package.json", "dist/cjs/package.json",
@@ -140,7 +140,7 @@ const errorKind: RayonErrorKind = error.kind;
     );
   }
   console.log(
-    `Verified ${packed.filename}: all 38 required files, four ESM/CommonJS runtime exports, and 16 public types in both declaration formats.`,
+    `Verified ${packed.filename}: all required files, four ESM/CommonJS runtime exports, and 16 public types in both declaration formats.`,
   );
 } finally {
   rmSync(temp, { recursive: true, force: true });

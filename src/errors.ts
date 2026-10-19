@@ -1,5 +1,16 @@
 import type { RayonErrorKind, ErrorMetadata } from "./types.js";
 
+import { errorCatalog } from "./error-catalog.js";
+
+const historyAction = "Check request history before sending another request. Contact support with the request ID if it remains unclear.";
+
+export function trustedGuidance(code?: string, reason?: string, domain?: string, retryable?: boolean, billingStatus?: unknown) {
+  if (typeof reason !== "string" || !Object.hasOwn(errorCatalog, reason)) return undefined;
+  const entry = errorCatalog[reason as keyof typeof errorCatalog];
+  if (!(entry.codes as readonly string[]).includes(code ?? "")) return undefined;
+  return { reason, message: entry.message.replace("{domain}", safeDomain(domain) ?? "this domain"), action: entry.retryable && (safeBillingStatus(billingStatus) !== "not_charged" || retryable === false) ? historyAction : entry.action };
+}
+
 const messages: Record<RayonErrorKind, string> = {
   validation: "Invalid Rayon API request options.",
   auth: "Rayon API denied authentication or access.",
@@ -19,8 +30,14 @@ export class RayonError extends Error {
   readonly retryAfter?: string;
   readonly code?: string;
   readonly retryable?: boolean;
+  readonly reason?: string;
+  readonly action?: string;
+  readonly domain?: string;
+  readonly field?: string;
+  readonly billingStatus?: "not_charged" | "pending" | "unknown";
   constructor(kind: RayonErrorKind, metadata: ErrorMetadata = {}) {
-    super(messages[kind]);
+    const guidance = trustedGuidance(metadata.code, metadata.reason, metadata.domain, metadata.retryable, metadata.billingStatus);
+    super(guidance?.message ?? messages[kind]);
     this.name = "RayonError";
     this.kind = kind;
     this.statusCode = metadata.statusCode;
@@ -28,6 +45,11 @@ export class RayonError extends Error {
     this.retryAfter = metadata.retryAfter;
     this.code = metadata.code;
     this.retryable = metadata.retryable;
+    this.reason = guidance?.reason;
+    this.action = guidance?.action;
+    this.domain = safeDomain(metadata.domain);
+    this.field = safeField(metadata.field);
+    this.billingStatus = safeBillingStatus(metadata.billingStatus);
   }
 }
 
@@ -44,4 +66,23 @@ export function isTransportTimeout(error: unknown): boolean {
   } catch {
     return false;
   }
+}
+
+/** Display hostnames only: never retain a source URL, IP literal or credential. */
+export function safeDomain(value: unknown, key?: string): string | undefined {
+  return typeof value === "string" && value.length <= 253 && (key === undefined || !value.includes(key)) &&
+    /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(value) &&
+    !/[^a-z0-9.-]/.test(value) ? value : undefined;
+}
+
+export function safeField(value: unknown, key?: string): string | undefined {
+  return typeof value === "string" && value.length <= 96 && (key === undefined || !value.includes(key)) &&
+    /^[a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*$/.test(value) &&
+    !/[^a-zA-Z0-9_.]/.test(value) &&
+    !value.split(".").some(part => ["__proto__", "constructor", "prototype"].includes(part))
+    ? value : undefined;
+}
+
+export function safeBillingStatus(value: unknown): ErrorMetadata["billingStatus"] {
+  return value === "not_charged" || value === "pending" || value === "unknown" ? value : undefined;
 }

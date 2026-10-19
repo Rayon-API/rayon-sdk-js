@@ -45,3 +45,8 @@ exact-case form families, telemetry-only body composition, transport mismatch re
 material reuse, and new public form types before publishing. Verify the six required
 headers with optional fresh same-family `a0`, original names and values, duplicate and
 incomplete-family rejection, and exactly six form fields with a larger `a` value.
+
+Error guidance uses the shared service catalog. Refresh the generated source and fixture with
+`node scripts/generate-error-catalog.mjs /path/to/shared/service/error_catalog.json`.
+After building, run `node scripts/check-error-parity.mjs /path/to/rayon-sdk-py`
+(optional third argument: Python executable) to check catalog and behavior parity.
