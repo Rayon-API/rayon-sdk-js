@@ -146,6 +146,11 @@ export type RayonErrorKind =
   | "aborted";
 
 export interface ErrorMetadata {
+  reason?: string;
+  action?: string;
+  domain?: string;
+  field?: string;
+  billingStatus?: "not_charged" | "pending" | "unknown";
   retryable?: boolean;
   statusCode?: number;
   requestId?: string;

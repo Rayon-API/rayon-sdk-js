@@ -5,7 +5,7 @@ import type {
 import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { createGunzip, createInflate, createBrotliDecompress } from "node:zlib";
-import { RayonError } from "./errors.js";
+import { RayonError, trustedGuidance, safeDomain, safeField } from "./errors.js";
 import { copyJson, isRecord } from "./json.js";
 import { safeFormFields } from "./validation.js";
 
@@ -172,7 +172,16 @@ export function responseMetadata(
   const error =
     isRecord(value) && isRecord(value.error) ? value.error : undefined;
   const code = error?.code;
+  const domain = safeDomain(error?.domain, key);
+  const guidance = trustedGuidance(typeof code === "string" && !code.includes(key) ? code : undefined,
+    typeof error?.reason === "string" && !error.reason.includes(key) ? error.reason : undefined, domain);
   return {
+    reason: guidance?.reason,
+    action: guidance?.action,
+    domain,
+    field: safeField(error?.field, key),
+    billingStatus: error?.billing_status === "not_charged" || error?.billing_status === "pending" || error?.billing_status === "unknown"
+      ? error.billing_status : undefined,
     retryable: typeof error?.retryable === "boolean" ? error.retryable : undefined,
     statusCode,
     requestId:
