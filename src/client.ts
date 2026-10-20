@@ -1,5 +1,6 @@
 import { Agent, request, type Dispatcher } from "undici";
 import { createHash } from "node:crypto";
+import { performance } from "node:perf_hooks";
 import type {
   ShapeRequest,
   ShapeResult,
@@ -18,7 +19,13 @@ import { isRecord, copyJson } from "./json.js";
 import { validateShape, validUrl } from "./validation.js";
 import { parseResult, readResponse, responseMetadata } from "./response.js";
 
-/** Persistent ordinary-TLS client. No automatic generation retries or URL downloads. */
+type MaterialEntry = {
+  ref: string; expires: number; sourceUrl: string;
+  scripts: ScriptMaterial[]; size: number;
+};
+type MaterialFlight = { ready: Promise<boolean>; finish: (success: boolean) => void };
+
+/** Persistent client. Only confirmed uncharged material misses recover once. */
 export class RayonClient {
   #apiKey: string;
   #baseUrl: string;
@@ -26,7 +33,9 @@ export class RayonClient {
   #dispatcher: Dispatcher;
   #ownedAgent?: Agent;
   #closed = false;
-  #cache = new Map<string, { ref: string; expires: number }>();
+  #cache = new Map<string, MaterialEntry>();
+  #cacheBytes = 0;
+  #flights = new Map<string, MaterialFlight>();
   constructor(apiKey: string, options: ClientOptions = {}) {
     try {
       if (
@@ -72,6 +81,9 @@ export class RayonClient {
     if (this.#closed) return;
     this.#closed = true;
     this.#cache.clear();
+    this.#cacheBytes = 0;
+    for (const flight of this.#flights.values()) flight.finish(false);
+    this.#flights.clear();
     await this.#ownedAgent?.close();
   }
   generate(
@@ -87,39 +99,105 @@ export class RayonClient {
     shape: ShapeRequest<"header" | "form">,
     options: RequestOptions = {},
   ): Promise<ShapeResult | FormShapeResult> {
+    if (this.#closed || !isRecord(options) ||
+        (options.signal !== undefined && !(options.signal instanceof AbortSignal)))
+      throw new RayonError("validation");
+    if (options.signal?.aborted) throw new RayonError("aborted");
     const body = validateShape(shape);
+    let scripts = body.scripts;
     let cacheKey: string | undefined;
-    if (body.scripts) {
-      cacheKey = createHash("sha256")
-        .update(
-          JSON.stringify([
-            body.source_url,
-            body.scripts.map((s) => [s.url, s.source]),
-          ]),
-        )
-        .digest("hex");
-      const cached = this.#cache.get(cacheKey);
-      if (cached && cached.expires > Date.now()) {
-        delete (body as { scripts?: ScriptMaterial[] }).scripts;
-        (body as { material_ref?: string }).material_ref = cached.ref;
-      } else if (cached) this.#cache.delete(cacheKey);
-    }
-    const [value, metadata] = await this.#send(
-      "POST",
-      "/v1/shape",
-      body,
-      options,
-    );
-    const result = parseResult(value, metadata, this.#apiKey, body.mode ?? "header");
-    if (cacheKey && result.material_ref && result.material_expires_at) {
-      const expires = Date.parse(result.material_expires_at);
-      if (expires > Date.now()) {
-        if (this.#cache.size >= 128)
-          this.#cache.delete(this.#cache.keys().next().value!);
-        this.#cache.set(cacheKey, { ref: result.material_ref, expires });
+    if (scripts) {
+      cacheKey = createHash("sha256").update(JSON.stringify([
+        body.source_url, scripts.map((s) => [s.url, s.source]),
+      ])).digest("hex");
+    } else {
+      for (const [key, cached] of this.#cache) {
+        if (cached.ref === body.material_ref && cached.sourceUrl === body.source_url) {
+          cacheKey = key;
+          scripts = cached.scripts;
+          break;
+        }
       }
     }
-    return result;
+    const deadline = performance.now() + this.#timeoutMs;
+    let recovered = false;
+    while (true) {
+      if (this.#closed) throw new RayonError("validation");
+      if (options.signal?.aborted) throw new RayonError("aborted");
+      let flight: MaterialFlight | undefined;
+      if (cacheKey && scripts) {
+        const pending = this.#flights.get(cacheKey);
+        if (pending) {
+          if (!await this.#waitMaterial(pending, options.signal, deadline))
+            throw new RayonError("network");
+          continue;
+        }
+        const cached = this.#cache.get(cacheKey);
+        if (cached && cached.expires > Date.now() + 5000) {
+          delete (body as { scripts?: ScriptMaterial[] }).scripts;
+          (body as { material_ref?: string }).material_ref = cached.ref;
+        } else {
+          delete (body as { material_ref?: string }).material_ref;
+          (body as { scripts?: ScriptMaterial[] }).scripts = scripts;
+          if (this.#flights.size < 128) {
+            let finish!: (success: boolean) => void;
+            const ready = new Promise<boolean>((resolve) => { finish = resolve; });
+            flight = { ready, finish };
+            this.#flights.set(cacheKey, flight);
+          }
+        }
+      }
+      let success = false;
+      try {
+        const [value, metadata] = await this.#send("POST", "/v1/shape", body, options, deadline);
+        const result = parseResult(value, metadata, this.#apiKey, body.mode ?? "header");
+        if (cacheKey && scripts) this.#remember(cacheKey, scripts, body, result);
+        success = true;
+        return result;
+      } catch (error) {
+        if (recovered || !scripts || !body.material_ref ||
+            !(error instanceof RayonError) || error.kind !== "http" ||
+            error.statusCode !== 422 || error.code !== "material_expired" ||
+            error.billingStatus !== "not_charged") throw error;
+        const cached = cacheKey ? this.#cache.get(cacheKey) : undefined;
+        if (cached?.ref === body.material_ref) cached.expires = 0;
+        recovered = true;
+      } finally {
+        if (flight) {
+          if (this.#flights.get(cacheKey!) === flight) this.#flights.delete(cacheKey!);
+          flight.finish(success);
+        }
+      }
+    }
+  }
+  #remember(key: string, scripts: ScriptMaterial[],
+    body: ShapeRequest<"header" | "form">, result: ShapeResult | FormShapeResult): void {
+    // Reference generations cannot extend TTL or undo a confirmed miss.
+    if (this.#closed || !body.scripts) return;
+    const previous = this.#cache.get(key);
+    const size = Buffer.byteLength(JSON.stringify([body.source_url, scripts]));
+    if (size > 16 * 1024 * 1024) return;
+    if (previous) { this.#cacheBytes -= previous.size; this.#cache.delete(key); }
+    while (this.#cache.size && (this.#cache.size >= 128 || this.#cacheBytes + size > 16 * 1024 * 1024)) {
+      const oldestKey = this.#cache.keys().next().value!;
+      this.#cacheBytes -= this.#cache.get(oldestKey)!.size;
+      this.#cache.delete(oldestKey);
+    }
+    this.#cache.set(key, {ref: result.material_ref, expires: Date.parse(result.material_expires_at),
+      sourceUrl: body.source_url, scripts, size});
+    this.#cacheBytes += size;
+  }
+  async #waitMaterial(flight: MaterialFlight, signal: AbortSignal | undefined,
+    deadline: number): Promise<boolean> {
+    if (signal?.aborted) throw new RayonError("aborted");
+    return new Promise<boolean>((resolve, reject) => {
+      const cleanup = () => { clearTimeout(timer); signal?.removeEventListener("abort", abort); };
+      const abort = () => { cleanup(); reject(new RayonError("aborted")); };
+      const timer = setTimeout(() => { cleanup(); reject(new RayonError("timeout")); },
+        Math.max(0, deadline - performance.now()));
+      signal?.addEventListener("abort", abort, {once: true});
+      flight.ready.then((success) => { cleanup(); resolve(success); });
+    });
   }
   async usage(options: RequestOptions = {}): Promise<UsageResult> {
     const [value] = await this.#send("GET", "/v1/usage", undefined, options);
@@ -135,6 +213,7 @@ export class RayonClient {
     path: string,
     body: ShapeRequest<"header" | "form"> | undefined,
     options: RequestOptions,
+    deadline?: number,
   ): Promise<[unknown, ErrorMetadata]> {
     if (
       this.#closed ||
@@ -143,10 +222,12 @@ export class RayonClient {
     )
       throw new RayonError("validation");
     if (options.signal?.aborted) throw new RayonError("aborted");
+    const budget = deadline === undefined ? this.#timeoutMs : Math.ceil(deadline - performance.now());
+    if (budget <= 0) throw new RayonError("timeout");
     const controller = new AbortController();
     const abort = () => controller.abort();
     options.signal?.addEventListener("abort", abort, { once: true });
-    const timer = setTimeout(() => controller.abort(), this.#timeoutMs);
+    const timer = setTimeout(() => controller.abort(), budget);
     let metadata: ErrorMetadata = {};
     try {
       const response = await request(this.#baseUrl + path, {
@@ -157,8 +238,8 @@ export class RayonClient {
         },
         ...(body ? { body: JSON.stringify(body) } : {}),
         signal: controller.signal,
-        headersTimeout: this.#timeoutMs,
-        bodyTimeout: this.#timeoutMs,
+        headersTimeout: budget,
+        bodyTimeout: budget,
         ...(this.#dispatcher ? { dispatcher: this.#dispatcher } : {}),
       });
       metadata = responseMetadata(

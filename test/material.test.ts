@@ -557,8 +557,8 @@ for (const mode of ["client", "helper"])
       assert.ok(
         seen.every(
           (option) =>
-            option.headersTimeout === (override ?? 45000) &&
-            option.bodyTimeout === (override ?? 45000),
+            option.headersTimeout! <= (override ?? 45000) && option.headersTimeout! > (override ?? 45000) - 100 &&
+            option.bodyTimeout! <= (override ?? 45000) && option.bodyTimeout! > (override ?? 45000) - 100,
         ),
       );
     });
