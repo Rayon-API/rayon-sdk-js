@@ -5,6 +5,15 @@ import { responseMetadata } from "../src/response.js";
 import { RayonError } from "../src/errors.js";
 
 const key = "test-secret-key";
+test("incomplete generation gives neutral loader guidance and a support path", () => {
+  const error = new RayonError("http", responseMetadata(422, {}, key, {
+    error: {code: "generation_incomplete", reason: "generation_incomplete", billing_status: "pending", retryable: false},
+  }));
+  assert.equal(error.message, "Generation did not complete.");
+  assert.match(error.action ?? "", /loader/);
+  assert.match(error.action ?? "", /If all required scripts were supplied/);
+  assert.equal(error.retryable, false);
+});
 function failure(extra: Record<string, unknown> = {}) {
   return new RayonError("auth", responseMetadata(403, {"retry-after": "7"}, key, {
     error: {code: "access_denied", reason: "account_disabled", request_id: "req-123", retryable: false,
