@@ -23,7 +23,7 @@ try {
   assert.equal(packed.name, "rayon-sdk-js");
   assert.equal(packed.version, JSON.parse(readFileSync(join(root, "package.json"), "utf8")).version);
   const modules = [
-    "index", "types", "error-catalog", "errors", "json", "profile", "validation", "response", "client",
+    "index", "types", "error-catalog", "errors", "json", "profile", "validation", "response", "client", "preparation",
   ];
   const expected = [
     "README.md", "RELEASE.md", "CHANGELOG.md", "LICENSE", "package.json", "dist/cjs/package.json",
@@ -87,6 +87,7 @@ const { RayonClient, generate, validate_profile, RayonError } = sdk;
   RayonClient, generate, validate_profile, RayonError,
   type JsonValue, type BrowserProfile, type ScriptMaterial, type TargetRequest,
   type ShapeRequest, type ShapeResult, type FormShapeRequest, type HeaderShapeRequest, type FormShapeResult, type FormMetadata, type ClientOptions, type GenerateOptions,
+  type MaterialPreparation, type ReadyMaterial, type WaitUntilReadyOptions, type GetPreparationOptions, type PreparationOptions, type PreparationState, type PreparationError,
   type RequestOptions, type UsageResult, type RayonErrorKind, type ErrorMetadata,
 } from 'rayon-sdk-js';
 const json: JsonValue = { nested: [null, true, 1, 'value'] };
@@ -101,6 +102,10 @@ const result: Promise<ShapeResult> = generate(shape, 'key', options);
 const client = new RayonClient('key', clientOptions);
 const generated: Promise<ShapeResult> = client.generate(shape, requestOptions);
 const usage: Promise<UsageResult> = client.usage(requestOptions);
+const preparation: Promise<MaterialPreparation> = client.prepare(shape);
+const preparationStatus: Promise<MaterialPreparation> = client.getPreparation('prep_0123456789abcdef', {wait: 10});
+const ready: Promise<ReadyMaterial> = client.waitUntilReady('prep_0123456789abcdef', {waitTimeoutMs: 60000});
+const prepared: Promise<ReadyMaterial> = client.prepareAndWait(shape, {signal: options.signal});
 const formMetadata: FormMetadata = { id: 'checkout' };
 const formShape: FormShapeRequest = { source_url: 'https://example.com', scripts, profile, mode: 'form', form: formMetadata, request: { ...target, method: 'POST', content_type: 'application/x-www-form-urlencoded', body: '' } };
 const formResult: Promise<ShapeResult<"form">> = generate(formShape, 'key', options);
@@ -140,7 +145,7 @@ const errorKind: RayonErrorKind = error.kind;
     );
   }
   console.log(
-    `Verified ${packed.filename}: all required files, four ESM/CommonJS runtime exports, and 16 public types in both declaration formats.`,
+    `Verified ${packed.filename}: all required files, four ESM/CommonJS runtime exports, and public types in both declaration formats.`,
   );
 } finally {
   rmSync(temp, { recursive: true, force: true });

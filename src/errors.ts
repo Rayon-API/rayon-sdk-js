@@ -12,6 +12,8 @@ export function trustedGuidance(code?: string, reason?: string, domain?: string,
 }
 
 const messages: Record<RayonErrorKind, string> = {
+  preparation_failed: "Rayon material preparation failed.",
+  preparation_expired: "Rayon material preparation expired.",
   validation: "Invalid Rayon API request options.",
   auth: "Rayon API denied authentication or access.",
   rate_limit: "Rayon API request limit reached.",
@@ -25,6 +27,7 @@ const messages: Record<RayonErrorKind, string> = {
 
 export class RayonError extends Error {
   readonly kind: RayonErrorKind;
+  readonly preparationId?: string;
   readonly statusCode?: number;
   readonly requestId?: string;
   readonly retryAfter?: string;
@@ -40,6 +43,7 @@ export class RayonError extends Error {
     super(guidance?.message ?? messages[kind]);
     this.name = "RayonError";
     this.kind = kind;
+    this.preparationId = typeof metadata.preparationId === "string" && /^[A-Za-z0-9_-]{16,128}$/.test(metadata.preparationId) ? metadata.preparationId : undefined;
     this.statusCode = metadata.statusCode;
     this.requestId = metadata.requestId;
     this.retryAfter = metadata.retryAfter;

@@ -1,7 +1,8 @@
 import { Agent, request, type Dispatcher } from "undici";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import type {
+  MaterialPreparation, ReadyMaterial, PreparationOptions, GetPreparationOptions, WaitUntilReadyOptions,
   ShapeRequest,
   ShapeResult,
   FormShapeResult,
@@ -14,6 +15,7 @@ import type {
   ErrorMetadata,
   GenerateOptions,
 } from "./types.js";
+import { parsePreparation, preparationId } from "./preparation.js";
 import { RayonError, isTransportTimeout } from "./errors.js";
 import { isRecord, copyJson } from "./json.js";
 import { validateShape, validUrl } from "./validation.js";
@@ -199,6 +201,83 @@ export class RayonClient {
       flight.ready.then((success) => { cleanup(); resolve(success); });
     });
   }
+  /** Explicitly start preparation. Generation is never performed by this method. */
+  async prepare(shape: ShapeRequest<"header" | "form">, options: PreparationOptions = {}): Promise<MaterialPreparation> {
+    const body = validateShape(shape);
+    const [value, metadata] = await this.#send("POST", "/v1/materials/prepare", body, options,
+      undefined, randomUUID());
+    return parsePreparation(value, metadata, this.#apiKey);
+  }
+  async getPreparation(id: string, options: GetPreparationOptions = {}): Promise<MaterialPreparation> {
+    try { return await this.#getPreparation(id, options); }
+    catch (error) {
+      if (error instanceof RayonError && preparationId(id) && !id.includes(this.#apiKey))
+        throw new RayonError(error.kind, {...error, preparationId: id});
+      throw error;
+    }
+  }
+  async #getPreparation(id: string, options: GetPreparationOptions, deadline?: number): Promise<MaterialPreparation> {
+    if (!preparationId(id) || id.includes(this.#apiKey) || !isRecord(options as unknown) ||
+        (options.wait !== undefined && (!Number.isSafeInteger(options.wait) || options.wait < 0 || options.wait > 10)))
+      throw new RayonError("validation");
+    const [value, metadata] = await this.#send("GET", `/v1/materials/preparations/${id}?wait=${options.wait ?? 0}`,
+      undefined, options, deadline);
+    return parsePreparation(value, metadata, this.#apiKey, id);
+  }
+  async waitUntilReady(id: string, options: WaitUntilReadyOptions = {}): Promise<ReadyMaterial> {
+    if (!preparationId(id) || id.includes(this.#apiKey)) throw new RayonError("validation");
+    const deadline = performance.now() + this.#waitBudget(options);
+    try {
+      while (true) {
+        if (options.signal?.aborted) throw new RayonError("aborted");
+        const remaining = deadline - performance.now();
+        if (remaining <= 0) throw new RayonError("timeout");
+        let result: MaterialPreparation;
+        try {
+          result = await this.#getPreparation(id, {signal: options.signal, wait: Math.min(10, Math.floor(Math.min(remaining, this.#timeoutMs) / 1000))}, deadline);
+        } catch (error) {
+          if (!(error instanceof RayonError) || !(
+              error.kind === "network" || error.kind === "timeout" ||
+              [408, 429, 500, 502, 503, 504].includes(error.statusCode ?? 0))) throw error;
+          await this.#preparationPause(100 + Math.random() * 300, deadline, options.signal);
+          continue;
+        }
+        if (result.state === "ready") return result as ReadyMaterial;
+        if (result.state === "failed" || result.state === "expired")
+          throw new RayonError(result.state === "failed" ? "preparation_failed" : "preparation_expired",
+            {code: result.error?.code, reason: result.error?.reason, retryable: result.error?.retryable});
+        await this.#preparationPause(Math.max(10, result.retry_after_ms), deadline, options.signal);
+      }
+    } catch (error) {
+      if (error instanceof RayonError) throw new RayonError(error.kind, {...error, preparationId: id});
+      throw error;
+    }
+  }
+  async prepareAndWait(shape: ShapeRequest<"header" | "form">, options: WaitUntilReadyOptions = {}): Promise<ReadyMaterial> {
+    this.#waitBudget(options);
+    const result = await this.prepare(shape, options);
+    if (result.state === "ready") return result as ReadyMaterial;
+    return this.waitUntilReady(result.preparation_id, options);
+  }
+  #waitBudget(options: WaitUntilReadyOptions): number {
+    if (!isRecord(options as unknown) ||
+        (options.signal !== undefined && !(options.signal instanceof AbortSignal)) ||
+        (options.waitTimeoutMs !== undefined && (!Number.isSafeInteger(options.waitTimeoutMs) ||
+          options.waitTimeoutMs <= 0 || options.waitTimeoutMs > 2147483647)))
+      throw new RayonError("validation");
+    return options.waitTimeoutMs ?? 60000;
+  }
+  async #preparationPause(delay: number, deadline: number, signal?: AbortSignal): Promise<void> {
+    if (signal?.aborted) throw new RayonError("aborted");
+    const remaining = deadline - performance.now();
+    if (remaining <= 0) throw new RayonError("timeout");
+    await new Promise<void>((resolve, reject) => {
+      const cleanup = () => { clearTimeout(timer); signal?.removeEventListener("abort", abort); };
+      const abort = () => { cleanup(); reject(new RayonError("aborted")); };
+      const timer = setTimeout(() => { cleanup(); resolve(); }, Math.min(delay, remaining));
+      signal?.addEventListener("abort", abort, {once:true});
+    });
+  }
   async usage(options: RequestOptions = {}): Promise<UsageResult> {
     const [value] = await this.#send("GET", "/v1/usage", undefined, options);
     try {
@@ -214,6 +293,7 @@ export class RayonClient {
     body: ShapeRequest<"header" | "form"> | undefined,
     options: RequestOptions,
     deadline?: number,
+    idempotencyKey?: string,
   ): Promise<[unknown, ErrorMetadata]> {
     if (
       this.#closed ||
@@ -222,7 +302,7 @@ export class RayonClient {
     )
       throw new RayonError("validation");
     if (options.signal?.aborted) throw new RayonError("aborted");
-    const budget = deadline === undefined ? this.#timeoutMs : Math.ceil(deadline - performance.now());
+    const budget = deadline === undefined ? this.#timeoutMs : Math.min(this.#timeoutMs, Math.ceil(deadline - performance.now()));
     if (budget <= 0) throw new RayonError("timeout");
     const controller = new AbortController();
     const abort = () => controller.abort();
@@ -234,6 +314,7 @@ export class RayonClient {
         method,
         headers: {
           authorization: `Bearer ${this.#apiKey}`,
+          ...(idempotencyKey ? {"idempotency-key": idempotencyKey} : {}),
           ...(body ? { "content-type": "application/json" } : {}),
         },
         ...(body ? { body: JSON.stringify(body) } : {}),
@@ -253,7 +334,8 @@ export class RayonClient {
           response.body,
           response.headers["content-encoding"],
           controller.signal,
-          body?.mode === "form",
+          body?.mode === "form" || path.startsWith("/v1/materials/"),
+          path.startsWith("/v1/materials/"),
         );
       } catch (error) {
         if (controller.signal.aborted || isTransportTimeout(error))
@@ -261,7 +343,7 @@ export class RayonClient {
             options.signal?.aborted ? "aborted" : "timeout",
             metadata,
           );
-        if (response.statusCode === 200)
+        if (response.statusCode === 200 || (idempotencyKey && response.statusCode === 202))
           throw new RayonError("invalid_response", metadata);
       }
       metadata = responseMetadata(
@@ -270,7 +352,7 @@ export class RayonClient {
         this.#apiKey,
         value,
       );
-      if (response.statusCode !== 200)
+      if (response.statusCode !== 200 && !(idempotencyKey && response.statusCode === 202))
         throw new RayonError(
           response.statusCode === 401 || response.statusCode === 403
             ? "auth"

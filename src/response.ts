@@ -1,3 +1,4 @@
+import { strictJson } from "./preparation.js";
 import type { Dispatcher } from "undici";
 import type {
   ShapeResult, FormShapeResult, ErrorMetadata, BrowserProfile,
@@ -43,6 +44,7 @@ export async function readResponse(
   encoding: string | string[] | undefined,
   signal: AbortSignal,
   strictUtf8 = false,
+  strict = false,
 ): Promise<unknown> {
   const bounded = () => {
     let bytes = 0;
@@ -82,7 +84,7 @@ export async function readResponse(
   const text = strictUtf8
     ? new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes)
     : bytes.toString("utf8");
-  return JSON.parse(text) as unknown;
+  return strict ? strictJson(text) : JSON.parse(text) as unknown;
 }
 
 export function safeId(value: unknown, key: string): string | undefined {
