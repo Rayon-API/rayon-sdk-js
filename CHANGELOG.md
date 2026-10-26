@@ -1,11 +1,18 @@
 # Changelog
 
+## 2.0.0 — material preparation
+
+- Add explicit preparation, status, bounded wait and prepare-and-wait helpers.
+- Validate safe readiness metadata and preserve resumable preparation IDs on typed errors.
+- Preserve explicit generation and existing confirmed unbilled source-miss recovery.
+
 ## 1.1.5 — 2026-10-23
 
 - Clarify generation failure and incomplete-result messages with conditional script-loader and support guidance.
 - Explain generated header and form validation failures without assigning fault to supplied material.
 
 ## 1.1.4 — 2026-10-20
+
 
 - Bound retained original material to 128 bundles / 16 MiB per client and coalesce simultaneous uploads.
 - Refresh material on the next generation shortly before expiry; recover once from confirmed uncharged material expiry.

@@ -135,6 +135,8 @@ export interface UsageResult {
 }
 
 export type RayonErrorKind =
+  | "preparation_failed"
+  | "preparation_expired"
   | "validation"
   | "auth"
   | "rate_limit"
@@ -146,6 +148,7 @@ export type RayonErrorKind =
   | "aborted";
 
 export interface ErrorMetadata {
+  preparationId?: string;
   reason?: string;
   action?: string;
   domain?: string;
@@ -157,3 +160,32 @@ export interface ErrorMetadata {
   retryAfter?: string;
   code?: string;
 }
+
+export type PreparationState = 'queued' | 'learning' | 'validating' | 'publishing' | 'ready' | 'failed' | 'expired';
+export interface PreparationError {
+  code: string;
+  reason?: string;
+  retryable?: boolean;
+}
+/** Server readiness metadata. Contains no collected source, cookies or generated telemetry. */
+export interface MaterialPreparation {
+  preparation_id: string;
+  state: PreparationState;
+  status_url: string;
+  retry_after_ms: number;
+  preparation_expires_at: string;
+  material_ref: string;
+  material_expires_at: string;
+  ready_until: string | null;
+  execution_backend: 'rust' | null;
+  error: PreparationError | null;
+}
+export interface ReadyMaterial extends MaterialPreparation {
+  state: 'ready';
+  ready_until: string;
+  execution_backend: 'rust';
+  error: null;
+}
+export interface PreparationOptions extends RequestOptions {}
+export interface GetPreparationOptions extends RequestOptions { wait?: number }
+export interface WaitUntilReadyOptions extends RequestOptions { waitTimeoutMs?: number }

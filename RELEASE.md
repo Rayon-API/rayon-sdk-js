@@ -50,3 +50,11 @@ Error guidance uses the shared service catalog. Refresh the generated source and
 `node scripts/generate-error-catalog.mjs /path/to/shared/service/error_catalog.json`.
 After building, run `node scripts/check-error-parity.mjs /path/to/rayon-sdk-py`
 (optional third argument: Python executable) to check catalog and behavior parity.
+
+
+## Preparation release gate
+
+Publish only after the coordinated backend preparation API is deployed and its
+POST/GET contract has been checked. Run the complete tests, ESM/CJS builds and
+package declaration consumers. Generation signatures and result frames are unchanged.
+No package has been published as part of this source update.
