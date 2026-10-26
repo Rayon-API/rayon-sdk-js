@@ -364,8 +364,8 @@
     "codes": [
       "daily_quota_exceeded"
     ],
-    "message": "The request could not be completed.",
-    "action": "Contact support with the request ID. Check request history before sending another request.",
+    "message": "A legacy daily request cap rejected this request.",
+    "action": "Contact support with the request ID. This cap is separate from your weekly allowance and wallet balance.",
     "retryable": false
   },
   "durable_redis_required": {
@@ -508,8 +508,8 @@
     "codes": [
       "monthly_quota_exceeded"
     ],
-    "message": "The request could not be completed.",
-    "action": "Contact support with the request ID. Check request history before sending another request.",
+    "message": "A legacy monthly request cap rejected this request.",
+    "action": "Contact support with the request ID. This cap is separate from your weekly allowance and wallet balance.",
     "retryable": false
   },
   "native_build_mismatch": {
