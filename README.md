@@ -80,8 +80,10 @@ The [Python download helper](https://github.com/Rayon-API/rayon-examples) is opt
 
 ## Explicit material preparation (2.0.0)
 
-This release is coordinated with the backend preparation API; availability depends
-on that backend deployment. Preparation is an explicit step before generation:
+The additive preparation API is available. Preparation is an explicit step before
+generation; legacy generation remains available and mandatory preparation is not
+enabled. A 30-day migration window and cutoff will be announced separately.
+No cutoff date is set. Prepare the current full context before your workload:
 
 ```ts
 const queued = await client.prepare(shape);
