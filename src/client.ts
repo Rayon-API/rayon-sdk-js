@@ -110,7 +110,7 @@ export class RayonClient {
     let cacheKey: string | undefined;
     if (scripts) {
       cacheKey = createHash("sha256").update(JSON.stringify([
-        body.source_url, scripts.map((s) => [s.url, s.source, s.inline === true]),
+        body.source_url, scripts.map((s) => [s.url, s.source]),
       ])).digest("hex");
     } else if (body.material_ref !== undefined) {
       for (const [key, cached] of this.#cache) {

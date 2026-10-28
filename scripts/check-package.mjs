@@ -92,7 +92,7 @@ const { RayonClient, generate, validate_profile, RayonError } = sdk;
 } from 'rayon-sdk-js';
 const json: JsonValue = { nested: [null, true, 1, 'value'] };
 const profile: BrowserProfile = validate_profile({ navigator: {vendor: '😀'.repeat(5000)} });
-const scripts: ScriptMaterial[] = [{url: 'https://example.com/owned.js', source: '/* owned */', inline: false}];
+const scripts: ScriptMaterial[] = [{url: 'https://example.com/owned.js', source: '/* owned */'}];
 const target: TargetRequest = {url: 'https://example.com', method: 'GET', content_type: null, body: null};
 const autoShape: ShapeRequest = {source_url: 'https://example.com', profile, request: target};
 const autoResult: Promise<ShapeResult> = generate(autoShape, 'key');

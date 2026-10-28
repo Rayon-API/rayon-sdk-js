@@ -155,9 +155,7 @@ export function validateShape(
       for (const script of v.scripts)
         if (
           !isRecord(script) ||
-          !Object.hasOwn(script, "url") || !Object.hasOwn(script, "source") ||
-          Object.keys(script).some(k => !["url", "source", "inline"].includes(k)) ||
-          (Object.hasOwn(script, "inline") && typeof script.inline !== "boolean") ||
+          Object.keys(script).length !== 2 ||
           !validUrl(script.url) ||
           typeof script.source !== "string" ||
           !script.source ||

@@ -41,19 +41,3 @@ test("nullable metadata and zero duration remain valid",()=>{
   const value=parseResult({...result,path:"native",material_reuse:true,discovery_duration_ms:0,discovery_state:null,fallback_reason:null},{},"test-key");
   assert.equal(value.discovery_duration_ms,0);assert.equal(value.fallback_reason,null);
 });
-
-for (const suffixes of ["abcdfz",[..."abcdfz","a0"]]) test("compact headers preserve a complete family including optional a0",()=>{
- const headers=Object.fromEntries([...suffixes].map(s=>[`Compact${s}`,s==="d"?"":"value"]));
- const parsed=parseResult({...result,headers},{},"test-key");assert.deepEqual({...parsed.headers},headers);
- assert.throws(()=>parseResult({...result,headers:{...headers,Compacta:undefined}},{},"test-key"));
- assert.throws(()=>parseResult({...result,headers:{...headers,"Other-a":"value"}},{},"test-key"));
-});
-test("inline scripts remain distinct in the explicit material cache",async()=>{
- const agent=new MockAgent();agent.disableNetConnect();const bodies:any[]=[];
- for(let i=0;i<2;i++)agent.get("https://api.rayonapi.com").intercept({path:"/v1/shape",method:"POST"}).reply(200,opts=>{bodies.push(JSON.parse(String(opts.body)));return result;});
- const client=new RayonClient("test-key",{dispatcher:agent});
- try {for(const inline of [false,true])await client.generate({...shape,scripts:[{url:shape.source_url,source:"/* authored */",inline}]});
- assert.equal(bodies[0].scripts[0].inline,false);assert.equal(bodies[1].scripts[0].inline,true);assert.ok(!bodies[1].material_ref);
- for(const inline of [null,1,"true"])await assert.rejects(client.generate({...shape,scripts:[{url:shape.source_url,source:"/* authored */",inline}]} as any),e=>e instanceof RayonError&&e.kind==="validation");
- } finally {await client.close();await agent.close();}
-});

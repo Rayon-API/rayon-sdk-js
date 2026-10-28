@@ -17,7 +17,7 @@ export function safeHeaders(value: unknown): Record<string, string> {
   const suffixes = new Set<string>();
   let prefix: string | undefined;
   for (const [name, content] of Object.entries(value)) {
-    const match = /^([!#$%&'*+\-.^_`|~0-9a-z]{1,128}-?)(a0|[abcdfz])$/i.exec(name);
+    const match = /^([!#$%&'*+\-.^_`|~0-9a-z]{1,128})-(a0|[abcdfz])$/i.exec(name);
     if (!match || typeof content !== "string" || /[^\x21-\x7e]/.test(content))
       throw new Error("Invalid header");
     const family = match[1].toLowerCase();

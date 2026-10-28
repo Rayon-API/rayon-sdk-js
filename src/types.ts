@@ -59,8 +59,6 @@ export interface BrowserProfile {
 export interface ScriptMaterial {
   url: string;
   source: string;
-  /** Source embedded in the document; url identifies that document. */
-  inline?: boolean;
 }
 
 export interface TargetRequest {
