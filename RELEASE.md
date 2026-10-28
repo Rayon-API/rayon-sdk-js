@@ -52,9 +52,12 @@ After building, run `node scripts/check-error-parity.mjs /path/to/rayon-sdk-py`
 (optional third argument: Python executable) to check catalog and behavior parity.
 
 
-## Preparation release gate
 
-Publish only after the coordinated backend preparation API is deployed and its
-POST/GET contract has been checked. Run the complete tests, ESM/CJS builds and
-package declaration consumers. Generation signatures and result frames are unchanged.
-No package has been published as part of this source update.
+## Managed-material release gate
+
+Candidate: 2.1.0. Verify managed header generation, explicit uploads/references,
+materialless-preparation rejection, safe fallback metadata and all existing
+preparation/cancellation tests. Check package contents and a clean consumer.
+Publish only after the maintainer approves the API contract and release report.
+Keep Go's `/v2` import path. Publish core JS before the Playwright adapter, then
+examples and docs. Local builds do not publish packages or deploy services.

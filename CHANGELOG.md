@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.1.0 — managed material
+
+- Allow omitted material for managed header generation; preserve explicit overrides and preparation.
+- Keep automatic selection current across repeated requests and material changes.
+- Expose safe fallback and operation metadata. Keep existing retry, privacy and output validation.
+
 ## 2.0.0 — material preparation
 
 - Add explicit preparation, status, bounded wait and prepare-and-wait helpers.

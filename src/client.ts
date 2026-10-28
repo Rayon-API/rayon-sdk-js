@@ -112,7 +112,7 @@ export class RayonClient {
       cacheKey = createHash("sha256").update(JSON.stringify([
         body.source_url, scripts.map((s) => [s.url, s.source]),
       ])).digest("hex");
-    } else {
+    } else if (body.material_ref !== undefined) {
       for (const [key, cached] of this.#cache) {
         if (cached.ref === body.material_ref && cached.sourceUrl === body.source_url) {
           cacheKey = key;
@@ -203,7 +203,7 @@ export class RayonClient {
   }
   /** Explicitly start preparation. Generation is never performed by this method. */
   async prepare(shape: ShapeRequest<"header" | "form">, options: PreparationOptions = {}): Promise<MaterialPreparation> {
-    const body = validateShape(shape);
+    const body = validateShape(shape, true);
     const [value, metadata] = await this.#send("POST", "/v1/materials/prepare", body, options,
       undefined, randomUUID());
     return parsePreparation(value, metadata, this.#apiKey);

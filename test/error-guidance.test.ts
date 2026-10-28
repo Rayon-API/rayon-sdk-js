@@ -11,7 +11,7 @@ test("incomplete generation gives neutral loader guidance and a support path", (
   }));
   assert.equal(error.message, "Generation did not complete.");
   assert.match(error.action ?? "", /loader/);
-  assert.match(error.action ?? "", /If all required scripts were supplied/);
+  assert.match(error.action ?? "", /For managed material, contact support with the request ID/);
   assert.equal(error.retryable, false);
 });
 function failure(extra: Record<string, unknown> = {}) {

@@ -120,6 +120,7 @@ export function safeFormFields(
 
 export function validateShape(
   value: ShapeRequest<"header" | "form">,
+  requireMaterial = false,
 ): ShapeRequest<"header" | "form"> {
   try {
     const v = copyJson(value) as Record<string, unknown>;
@@ -140,7 +141,8 @@ export function validateShape(
           ].includes(k),
       ) ||
       !validUrl(v.source_url) ||
-      Object.hasOwn(v, "scripts") === Object.hasOwn(v, "material_ref")
+      (Object.hasOwn(v, "scripts") && Object.hasOwn(v, "material_ref")) ||
+      ((requireMaterial || v.mode === "form") && !Object.hasOwn(v, "scripts") && !Object.hasOwn(v, "material_ref"))
     )
       throw new Error();
     if (Object.hasOwn(v, "scripts")) {
@@ -168,10 +170,10 @@ export function validateShape(
         3 * 1024 * 1024
       )
         throw new Error();
-    } else if (
+    } else if (Object.hasOwn(v, "material_ref") && (
       typeof v.material_ref !== "string" ||
       !/^[A-Za-z0-9_-]{16,128}$/.test(v.material_ref)
-    )
+    ))
       throw new Error();
     v.profile = validate_profile(v.profile as BrowserProfile);
     const r = v.request;
