@@ -1,7 +1,7 @@
 import { strictJson } from "./preparation.js";
 import type { Dispatcher } from "undici";
 import type {
-  ShapeResult, FormShapeResult, ErrorMetadata, BrowserProfile,
+  ShapeResult, FormShapeResult, ErrorMetadata, BrowserProfile, OperationMetadata,
 } from "./types.js";
 import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -17,7 +17,7 @@ export function safeHeaders(value: unknown): Record<string, string> {
   const suffixes = new Set<string>();
   let prefix: string | undefined;
   for (const [name, content] of Object.entries(value)) {
-    const match = /^([!#$%&'*+\-.^_`|~0-9a-z]{1,128})-(a0|[abcdfz])$/i.exec(name);
+    const match = /^([!#$%&'*+\-.^_`|~0-9a-z]{1,128}-?)(a0|[abcdfz])$/i.exec(name);
     if (!match || typeof content !== "string" || /[^\x21-\x7e]/.test(content))
       throw new Error("Invalid header");
     const family = match[1].toLowerCase();
@@ -95,6 +95,21 @@ export function safeId(value: unknown, key: string): string | undefined {
     : undefined;
 }
 
+function operationMetadata(value: Record<string, unknown>, key: string): OperationMetadata {
+  const result: Record<string, unknown> = {};
+  for (const name of ["path", "material_reuse", "discovery_duration_ms", "discovery_state", "fallback_reason", "fallback_message"]) {
+    if (!Object.hasOwn(value, name)) continue;
+    const v = value[name];
+    if (name === "path") { if (v !== "native" && v !== "isolated") throw new Error(); }
+    else if (name === "material_reuse") { if (typeof v !== "boolean") throw new Error(); }
+    else if (name === "discovery_duration_ms") { if (v !== null && (typeof v !== "number" || !Number.isFinite(v) || v < 0 || v > 3600000)) throw new Error(); }
+    else if (name === "fallback_message") { if (typeof v !== "string" || v.length > 512 || /[^\x20-\x7e]/.test(v) || v.includes(key)) throw new Error(); }
+    else if (v !== null && (typeof v !== "string" || !/^[a-z][a-z0-9_]{0,63}$/.test(v) || v.includes(key))) throw new Error();
+    result[name] = v;
+  }
+  return result as OperationMetadata;
+}
+
 export function parseResult(
   value: unknown,
   metadata: ErrorMetadata,
@@ -140,6 +155,7 @@ export function parseResult(
     }
     const result: ShapeResult | FormShapeResult = {
       ...transport,
+      ...operationMetadata(value, key),
       request_id: value.request_id as string,
       generation_ms: value.generation_ms as number,
       profile_used: copyJson(value.profile_used) as BrowserProfile,

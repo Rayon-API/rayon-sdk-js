@@ -59,6 +59,8 @@ export interface BrowserProfile {
 export interface ScriptMaterial {
   url: string;
   source: string;
+  /** Source embedded in the document; url identifies that document. */
+  inline?: boolean;
 }
 
 export interface TargetRequest {
@@ -68,7 +70,7 @@ export interface TargetRequest {
   body: string | null;
 }
 
-export type MaterialInput =
+export type ExplicitMaterialInput =
   | { scripts: ScriptMaterial[]; material_ref?: never }
   | { scripts?: never; material_ref: string };
 
@@ -82,14 +84,26 @@ type ShapeRequestBase = {
   profile: BrowserProfile;
   request: TargetRequest;
   document_cookie?: string;
-} & MaterialInput;
+};
 
-export type HeaderShapeRequest = ShapeRequestBase & { mode?: "header"; form?: never };
-export type FormShapeRequest = ShapeRequestBase & { mode: "form"; form?: FormMetadata };
+export type MaterialInput = ExplicitMaterialInput | { scripts?: never; material_ref?: never };
+
+export type HeaderShapeRequest = ShapeRequestBase & MaterialInput & { mode?: "header"; form?: never };
+export type FormShapeRequest = ShapeRequestBase & ExplicitMaterialInput & { mode: "form"; form?: FormMetadata };
 export type ShapeRequest<Mode extends "header" | "form" = "header"> =
   Mode extends "form" ? FormShapeRequest : HeaderShapeRequest;
 
-interface HeaderResult {
+/** Optional operation metadata returned by the API. Use fallback_reason to detect fallback. */
+export interface OperationMetadata {
+  path?: "native" | "isolated";
+  material_reuse?: boolean;
+  discovery_duration_ms?: number | null;
+  discovery_state?: string | null;
+  fallback_reason?: string | null;
+  fallback_message?: string;
+}
+
+interface HeaderResult extends OperationMetadata {
   headers: Record<string, string>;
   request_id: string;
   generation_ms: number;
@@ -98,7 +112,7 @@ interface HeaderResult {
   material_expires_at: string;
 }
 
-export interface FormShapeResult {
+export interface FormShapeResult extends OperationMetadata {
   form_fields: Record<string, string>;
   /** Telemetry only, already encoded once in observed insertion order. */
   form_body: string;

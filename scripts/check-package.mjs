@@ -92,8 +92,13 @@ const { RayonClient, generate, validate_profile, RayonError } = sdk;
 } from 'rayon-sdk-js';
 const json: JsonValue = { nested: [null, true, 1, 'value'] };
 const profile: BrowserProfile = validate_profile({ navigator: {vendor: '😀'.repeat(5000)} });
-const scripts: ScriptMaterial[] = [{url: 'https://example.com/owned.js', source: '/* owned */'}];
+const scripts: ScriptMaterial[] = [{url: 'https://example.com/owned.js', source: '/* owned */', inline: false}];
 const target: TargetRequest = {url: 'https://example.com', method: 'GET', content_type: null, body: null};
+const autoShape: ShapeRequest = {source_url: 'https://example.com', profile, request: target};
+const autoResult: Promise<ShapeResult> = generate(autoShape, 'key');
+autoResult.then(result => { const reason: string | null | undefined = result.fallback_reason; const duration: number | null | undefined = result.discovery_duration_ms; });
+// @ts-expect-error form mode requires explicit material
+const invalidAutoForm: FormShapeRequest = { ...autoShape, mode: 'form' };
 const shape: ShapeRequest = {source_url: 'https://example.com', scripts, profile, request: target};
 const clientOptions: ClientOptions = { timeoutMs: 1000 };
 const options: GenerateOptions = { ...clientOptions, signal: new AbortController().signal };

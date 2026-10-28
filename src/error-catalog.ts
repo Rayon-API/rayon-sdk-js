@@ -133,8 +133,8 @@ export const errorCatalog = {
     "codes": [
       "unsupported_material"
     ],
-    "message": "The supplied scripts did not produce usable headers or form fields.",
-    "action": "Upload complete, current scripts in execution order. Contact support with the request ID if this continues.",
+    "message": "The selected material did not produce usable headers or form fields.",
+    "action": "For managed material, contact support with the request ID. For explicit uploads, check current scripts and execution order, including loader dependencies.",
     "retryable": false
   },
   "input_too_large": {
@@ -238,7 +238,7 @@ export const errorCatalog = {
       "generation_failed"
     ],
     "message": "Generation failed.",
-    "action": "Check that all required scripts are included in execution order, including scripts loaded by a loader. If all required scripts were supplied, contact support with the request ID so we can investigate runtime compatibility.",
+    "action": "For managed material, contact support with the request ID. For explicit uploads, check current scripts and execution order, including loader dependencies.",
     "retryable": false
   },
   "generation_incomplete": {
@@ -246,7 +246,7 @@ export const errorCatalog = {
       "generation_incomplete"
     ],
     "message": "Generation did not complete.",
-    "action": "Check that all required scripts are included in execution order, including scripts loaded by a loader. If all required scripts were supplied, contact support with the request ID so we can investigate runtime compatibility.",
+    "action": "For managed material, contact support with the request ID. For explicit uploads, check current scripts and execution order, including loader dependencies.",
     "retryable": false
   },
   "generation_invalid_headers": {
@@ -269,8 +269,8 @@ export const errorCatalog = {
     "codes": [
       "unknown_material"
     ],
-    "message": "The supplied material could not produce a valid result.",
-    "action": "Check the supplied material. Contact support with the request ID if this continues.",
+    "message": "The selected material could not produce a valid result.",
+    "action": "For managed material, contact support with the request ID. For explicit uploads, check current scripts and execution order, including loader dependencies.",
     "retryable": false
   },
   "admission_unavailable": {
