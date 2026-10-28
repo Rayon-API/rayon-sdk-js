@@ -205,9 +205,10 @@ export const errorCatalog = {
     "codes": [
       "material_cache_unavailable"
     ],
-    "message": "Material storage is temporarily unavailable.",
-    "action": "Contact support with the request ID if this continues.",
-    "retryable": false
+    "message": "Automatic material is warming or unavailable.",
+    "action": "Wait a moment, then retry. Contact support if this continues.",
+    "retryable": true,
+    "retry_after": 1
   },
   "generation_timeout": {
     "codes": [
