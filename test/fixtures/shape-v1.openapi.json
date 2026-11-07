@@ -1750,7 +1750,7 @@
             ]
           }
         },
-        "description": "Optional asynchronous preparation of explicit material. Ready means usable validated output and acknowledged publication for the supplied context. Defaulted internal records are accepted when outputs remain valid. Lost eligibility invalidates readiness. Waiting never starts generation or spends generation credits."
+        "description": "Required asynchronous preparation for custom material. Ready means complete validated output and acknowledged publication within the supplied context. Lost eligibility invalidates readiness. Status waits do not generate output or spend generation credits."
       },
       "ExplicitShapeRequest": {
         "additionalProperties": false,
@@ -1767,14 +1767,14 @@
             "maxItems": 16,
             "minItems": 1,
             "type": "array",
-            "description": "Preparation input: complete ordered JavaScript, 1–16 scripts, 2 MiB each / 3 MiB total. Supply scripts or material_ref, never both. Omit both for managed header generation."
+            "description": "Preparation input: complete ordered JavaScript, 1\u201316 scripts, 2 MiB each / 3 MiB total. Supply exactly one of scripts or material_ref."
           },
           "material_ref": {
             "maxLength": 128,
             "minLength": 16,
             "pattern": "^[A-Za-z0-9_-]+$",
             "type": "string",
-            "description": "Optional private API-key-scoped source reference. Do not pin this field in managed flows; leave both material fields omitted to select updates."
+            "description": "Existing API-key-scoped source reference to prepare for the supplied context. A reference alone does not establish readiness."
           },
           "profile": {
             "$ref": "#/components/schemas/BrowserProfile"
