@@ -32,9 +32,9 @@ The workflow runs on GitHub-hosted runners using Node.js 24 and verifies npm is 
 
 For a later release, update `package.json` and `package-lock.json` to the same new version, commit the reviewed changes, tag that commit `v<version>`, and create a GitHub release for that tag. Publishing the release triggers tests, both builds, the tarball audit, import/type checks, and tag/version validation before `npm publish --access public`.
 
-Prereleases must use an appropriate npm dist-tag; the supplied workflow intentionally rejects GitHub prereleases. No registry publish or remote push is performed by local tests or builds.
+The GitHub prerelease flag must match the package version. The workflow publishes prereleases under `next` and stable releases under `latest`. No registry publish or remote push is performed by local tests or builds.
 
-Verify current API guidance, exact target body preservation, lifecycle and cancellation, strict size/profile limits, safe error envelopes, expiry-scoped references, no retries of ambiguous POST outcomes and exactly one confirmed unbilled material-miss recovery in SDK 1.1.4+, and ESM/CommonJS type exports. Keep published packages and release tags immutable. Never include customer scripts, captured material, credentials, or private fixtures in packed files.
+Verify current API guidance, exact target body preservation, lifecycle and cancellation, strict size/profile limits, safe error envelopes, expiry-scoped references, no retries of ambiguous POST outcomes and no automatic generation retry, and ESM/CommonJS type exports. Keep published packages and release tags immutable. Never include customer scripts, captured material, credentials, or private fixtures in packed files.
 
 Version 1.0.2 preserves the four runtime exports and 12 public types across both module formats while splitting the implementation into eight modules. Check the exact tarball allowlist, reusable response references, and native transport timeouts before release. Run the package audit on Node.js 20.18.1 and Node.js 22 as well as the publishing toolchain.
 
@@ -52,12 +52,21 @@ After building, run `node scripts/check-error-parity.mjs /path/to/rayon-sdk-py`
 (optional third argument: Python executable) to check catalog and behavior parity.
 
 
-
 ## Managed-material release gate
 
-Candidate: 2.1.0. Verify managed header generation, explicit uploads/references,
+Candidate: 3.0.0-rc.1. Verify managed header generation, required custom preparation and ready references,
 materialless-preparation rejection, safe fallback metadata and all existing
 preparation/cancellation tests. Check package contents and a clean consumer.
 Publish only after the maintainer approves the API contract and release report.
-Keep Go's `/v2` import path. Publish core JS before the Playwright adapter, then
+Keep Go's `/v3` import path. Publish core JS before the Playwright adapter, then
 examples and docs. Local builds do not publish packages or deploy services.
+
+## Preparation-required release candidate
+
+This branch is not published or deployed. Generation rejects raw sources and
+never uploads sources, starts learning or retries on expiry. Custom material
+must reach ready before its reference is used. Make compatible preparation available, distribute reviewed SDKs, migrate clients,
+then enforce the new solve contract. Publish core SDK major 3 before Playwright major 2.
+Keep all account/context/readiness and billing checks. Do not move published tags.
+Refresh the Playwright registry lock entry after core JS is published; the new
+core version cannot resolve from npm before that publication.

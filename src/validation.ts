@@ -1,4 +1,4 @@
-import type { ShapeRequest, BrowserProfile } from "./types.js";
+import type { ShapeRequest, PreparationRequest, BrowserProfile } from "./types.js";
 import { RayonError } from "./errors.js";
 import { copyJson, isRecord } from "./json.js";
 import { validate_profile } from "./profile.js";
@@ -118,12 +118,15 @@ export function safeFormFields(
   return copied;
 }
 
+export function validateShape(value: PreparationRequest, requireMaterial: true): PreparationRequest;
+export function validateShape(value: ShapeRequest<"header" | "form">, requireMaterial?: false): ShapeRequest<"header" | "form">;
 export function validateShape(
-  value: ShapeRequest<"header" | "form">,
+  value: ShapeRequest<"header" | "form"> | PreparationRequest,
   requireMaterial = false,
-): ShapeRequest<"header" | "form"> {
+): PreparationRequest | ShapeRequest<"header" | "form"> {
   try {
     const v = copyJson(value) as Record<string, unknown>;
+    if (!requireMaterial && Object.hasOwn(v, "scripts")) throw new Error();
     if (
       !isRecord(v) ||
       !["source_url", "profile", "request"].every((k) => Object.hasOwn(v, k)) ||

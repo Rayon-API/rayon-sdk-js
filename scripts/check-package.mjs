@@ -87,7 +87,7 @@ const { RayonClient, generate, validate_profile, RayonError } = sdk;
   RayonClient, generate, validate_profile, RayonError,
   type JsonValue, type BrowserProfile, type ScriptMaterial, type TargetRequest,
   type ShapeRequest, type ShapeResult, type FormShapeRequest, type HeaderShapeRequest, type FormShapeResult, type FormMetadata, type ClientOptions, type GenerateOptions,
-  type MaterialPreparation, type ReadyMaterial, type WaitUntilReadyOptions, type GetPreparationOptions, type PreparationOptions, type PreparationState, type PreparationError,
+  type PreparationRequest, type MaterialPreparation, type ReadyMaterial, type WaitUntilReadyOptions, type GetPreparationOptions, type PreparationOptions, type PreparationState, type PreparationError,
   type RequestOptions, type UsageResult, type RayonErrorKind, type ErrorMetadata,
 } from 'rayon-sdk-js';
 const json: JsonValue = { nested: [null, true, 1, 'value'] };
@@ -99,7 +99,10 @@ const autoResult: Promise<ShapeResult> = generate(autoShape, 'key');
 autoResult.then(result => { const reason: string | null | undefined = result.fallback_reason; const duration: number | null | undefined = result.discovery_duration_ms; });
 // @ts-expect-error form mode requires explicit material
 const invalidAutoForm: FormShapeRequest = { ...autoShape, mode: 'form' };
-const shape: ShapeRequest = {source_url: 'https://example.com', scripts, profile, request: target};
+const shape: ShapeRequest = {source_url: 'https://example.com', material_ref:'ref_0123456789abcdef', profile, request: target};
+const preparationInput: PreparationRequest = {source_url:'https://example.com',scripts,profile,request:target};
+// @ts-expect-error raw sources belong to preparation, not generation
+const invalidRaw: ShapeRequest = {source_url:'https://example.com',scripts,profile,request:target};
 const clientOptions: ClientOptions = { timeoutMs: 1000 };
 const options: GenerateOptions = { ...clientOptions, signal: new AbortController().signal };
 const requestOptions: RequestOptions = { signal: options.signal };
@@ -107,12 +110,12 @@ const result: Promise<ShapeResult> = generate(shape, 'key', options);
 const client = new RayonClient('key', clientOptions);
 const generated: Promise<ShapeResult> = client.generate(shape, requestOptions);
 const usage: Promise<UsageResult> = client.usage(requestOptions);
-const preparation: Promise<MaterialPreparation> = client.prepare(shape);
+const preparation: Promise<MaterialPreparation> = client.prepare(preparationInput);
 const preparationStatus: Promise<MaterialPreparation> = client.getPreparation('prep_0123456789abcdef', {wait: 10});
 const ready: Promise<ReadyMaterial> = client.waitUntilReady('prep_0123456789abcdef', {waitTimeoutMs: 60000});
-const prepared: Promise<ReadyMaterial> = client.prepareAndWait(shape, {signal: options.signal});
+const prepared: Promise<ReadyMaterial> = client.prepareAndWait(preparationInput, {signal: options.signal});
 const formMetadata: FormMetadata = { id: 'checkout' };
-const formShape: FormShapeRequest = { source_url: 'https://example.com', scripts, profile, mode: 'form', form: formMetadata, request: { ...target, method: 'POST', content_type: 'application/x-www-form-urlencoded', body: '' } };
+const formShape: FormShapeRequest = { source_url: 'https://example.com', material_ref: 'ref_0123456789abcdef', profile, mode: 'form', form: formMetadata, request: { ...target, method: 'POST', content_type: 'application/x-www-form-urlencoded', body: '' } };
 const formResult: Promise<ShapeResult<"form">> = generate(formShape, 'key', options);
 const clientFormResult: Promise<FormShapeResult> = client.generate(formShape, requestOptions);
 function existingHeaderWrapper(value: ShapeRequest): Promise<ShapeResult> { return client.generate(value); }

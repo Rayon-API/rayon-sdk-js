@@ -20,7 +20,7 @@ function result(value = headers()) {
 }
 function shape(): HeaderShapeRequest {
   return {
-    source_url: "https://example.com/page", scripts: [{ url: "https://example.com/owned.js", source: "/* owned */" }],
+    source_url: "https://example.com/page", material_ref: "ref_0123456789abcdef",
     profile: {}, request: { url: "https://example.com/page", method: "GET", content_type: null, body: null },
   };
 }

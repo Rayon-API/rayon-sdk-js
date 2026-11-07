@@ -2,7 +2,7 @@ export { RayonClient, generate } from "./client.js";
 export { RayonError } from "./errors.js";
 export { validate_profile } from "./profile.js";
 export type {
-  OperationMetadata, MaterialInput, ExplicitMaterialInput,
+  OperationMetadata, MaterialInput, ExplicitMaterialInput, PreparationRequest,
   MaterialPreparation, ReadyMaterial, PreparationState, PreparationError,
   PreparationOptions, GetPreparationOptions, WaitUntilReadyOptions,
   JsonValue,

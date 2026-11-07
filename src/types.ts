@@ -84,10 +84,12 @@ type ShapeRequestBase = {
   document_cookie?: string;
 };
 
-export type MaterialInput = ExplicitMaterialInput | { scripts?: never; material_ref?: never };
+export type MaterialInput = { scripts?: never; material_ref?: string };
+export type PreparationRequest = ShapeRequestBase & ExplicitMaterialInput &
+  ({ mode?: "header"; form?: never } | { mode: "form"; form?: FormMetadata });
 
 export type HeaderShapeRequest = ShapeRequestBase & MaterialInput & { mode?: "header"; form?: never };
-export type FormShapeRequest = ShapeRequestBase & ExplicitMaterialInput & { mode: "form"; form?: FormMetadata };
+export type FormShapeRequest = ShapeRequestBase & { scripts?: never; material_ref: string; mode: "form"; form?: FormMetadata };
 export type ShapeRequest<Mode extends "header" | "form" = "header"> =
   Mode extends "form" ? FormShapeRequest : HeaderShapeRequest;
 
@@ -189,13 +191,15 @@ export interface MaterialPreparation {
   material_ref: string;
   material_expires_at: string;
   ready_until: string | null;
-  execution_backend: 'rust' | null;
+  /** @deprecated Legacy response metadata. Use state for readiness. */
+  execution_backend: string | null;
   error: PreparationError | null;
 }
 export interface ReadyMaterial extends MaterialPreparation {
   state: 'ready';
   ready_until: string;
-  execution_backend: 'rust';
+  /** @deprecated Legacy response metadata. Use state for readiness. */
+  execution_backend: string;
   error: null;
 }
 export interface PreparationOptions extends RequestOptions {}

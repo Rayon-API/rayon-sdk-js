@@ -11,7 +11,7 @@ test("managed requests stay omitted after explicit cache entries and material ro
   for(let i=0;i<4;i++) agent.get("https://api.rayonapi.com").intercept({path:"/v1/shape",method:"POST"}).reply(200, opts=>{ calls.push(JSON.parse(String(opts.body))); return {...result,material_ref:`ref_0123456789abcde${i}`}; });
   const client=new RayonClient("test-key",{dispatcher:agent});
   try {
-    await client.generate({...shape,scripts:[{url:"https://shop.example.com/a.js",source:"/* authored */"}]});
+    await client.generate({...shape,material_ref:"ref_0123456789abcdef"});
     for(let i=0;i<3;i++) await client.generate(shape);
     for(const body of calls.slice(1)){assert.ok(!Object.hasOwn(body,"scripts")); assert.ok(!Object.hasOwn(body,"material_ref"));}
     assert.deepEqual(shape.profile,{}); agent.assertNoPendingInterceptors();
@@ -25,7 +25,7 @@ test("explicit invalid fields, automatic forms and materialless preparation stay
 });
 test("results retain safe operation metadata including a fractional discovery duration",async()=>{
   const agent=new MockAgent(); agent.disableNetConnect();
-  const metadata={path:"isolated",material_reuse:false,discovery_duration_ms:12.5,discovery_state:"failed",fallback_reason:"unknown_material",fallback_message:"A fallback was used. Contact support with this request ID."};
+  const metadata={path:"native",material_reuse:false,discovery_duration_ms:12.5,discovery_state:"complete",fallback_reason:null};
   agent.get("https://api.rayonapi.com").intercept({path:"/v1/shape",method:"POST"}).reply(200,{...result,...metadata});
   const client=new RayonClient("test-key",{dispatcher:agent});
   try {const value=await client.generate(shape); for(const [k,v] of Object.entries(metadata)) assert.equal((value as any)[k],v);}

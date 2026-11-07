@@ -8,7 +8,7 @@ import { parseResult } from '../src/response.js';
 const key = 'test-secret-key';
 function shape(): any {
   return {
-    source_url: 'https://example.com/page', scripts: [{ url: 'https://example.com/owned.js', source: '/* owned */' }],
+    source_url: 'https://example.com/page', material_ref: "ref_0123456789abcdef",
     profile: {}, mode: 'form', form: { id: 'checkout', name: 'checkout' },
     request: { url: 'https://example.com/submit', method: 'POST', content_type: 'application/x-www-form-urlencoded; charset=UTF-8', body: 'tag=one&tag=two&csrf=a%2Bb&empty=' },
   };
@@ -64,7 +64,7 @@ test('form cache reuses material while retaining fresh mode and application stat
   const cached = { ...next, material_ref: 'ref_0123456789abcdef' }; delete cached.scripts;
   mock.get('https://api.rayonapi.com').intercept({ path: '/v1/shape', method: 'POST', body: JSON.stringify(cached) }).reply(200, result());
   const client = new RayonClient(key, { dispatcher: mock });
-  try { await client.generate(first); await client.generate(next); mock.assertNoPendingInterceptors(); assert.ok(next.scripts); }
+  try { await client.generate(first); await client.generate(next); mock.assertNoPendingInterceptors(); assert.equal(next.material_ref, "ref_0123456789abcdef"); }
   finally { await client.close(); await mock.close(); }
 });
 

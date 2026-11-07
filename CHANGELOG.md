@@ -1,5 +1,13 @@
 # Changelog
 
+## Preparation-required release candidate
+
+- Generation accepts ready managed material or a ready private reference; raw sources belong to preparation.
+- No generation source-upload cache, automatic expiry recovery, foreground learning or solve-time preparation.
+- Existing preparation/wait helpers and supported-context checks remain; refresh outside generation.
+- Breaking candidate: core SDK major 3, Playwright major 2. Not published or deployed.
+
+
 ## 2.1.0 — managed material
 
 - Allow omitted material for managed header generation; preserve explicit overrides and preparation.

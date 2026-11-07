@@ -6,7 +6,6 @@ permissions:
   contents: read
 jobs:
   publish:
-    if: ${{ !github.event.release.prerelease }}
     runs-on: ubuntu-latest
     environment: npm
     permissions:
@@ -22,6 +21,7 @@ jobs:
           cache: npm
       - name: Validate npm and release version
         env:
+          RELEASE_PRERELEASE: ${{ github.event.release.prerelease }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
           node --input-type=module <<'JS'
@@ -32,9 +32,19 @@ jobs:
           const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
           const lock = JSON.parse(readFileSync('package-lock.json', 'utf8'));
           if (process.env.RELEASE_TAG !== `v${pkg.version}` || lock.version !== pkg.version || lock.packages[''].version !== pkg.version) throw new Error('Release tag and package versions must match');
+          const prerelease = pkg.version.includes('-');
+          if (prerelease !== (process.env.RELEASE_PRERELEASE === 'true')) throw new Error('Release prerelease flag must match package version');
           JS
       - run: npm ci
       - run: npm test
       - run: npm run build
       - run: npm run test:package
-      - run: npm publish --access public
+      - name: Publish with the matching distribution tag
+        env:
+          RELEASE_PRERELEASE: ${{ github.event.release.prerelease }}
+        run: |
+          if [ "$RELEASE_PRERELEASE" = true ]; then
+            npm publish --access public --tag next
+          else
+            npm publish --access public --tag latest
+          fi

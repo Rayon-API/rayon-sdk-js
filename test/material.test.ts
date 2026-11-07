@@ -23,9 +23,7 @@ function generate(
 function shape(changes: Record<string, unknown> = {}): any {
   return {
     source_url: url,
-    scripts: [
-      { url: "https://example.com/owned.js", source: "/* owned material */" },
-    ],
+    material_ref: "ref_0123456789abcdef",
     profile: { language: "en-GB" },
     request: {
       url,
@@ -262,23 +260,13 @@ test("aborts whole request and caller abort signal", async () => {
     errorKind("aborted"),
   );
 });
-test("expired references and different material are not reused", async () => {
-  for (let i = 0; i < 3; i++)
-    mock
-      .get(origin)
-      .intercept({
-        path: "/v1/shape",
-        method: "POST",
-        body: (body: string) => Object.hasOwn(JSON.parse(body), "scripts"),
-      })
-      .reply(200, result({ material_expires_at: "2000-01-01T00:00:00Z" }));
-  const client = new sdk.RayonClient(key, { dispatcher: mock });
-  await client.generate(shape());
-  await client.generate(shape());
-  await client.generate(shape({ scripts: [{ url, source: "/* changed */" }] }));
-  await client.close();
-  mock.assertNoPendingInterceptors();
+test("expired references are surfaced without a script upload or retry", async () => {
+ mock.get(origin).intercept({path:"/v1/shape",method:"POST"}).reply(422,{error:{code:"material_expired",billing_status:"not_charged"}});
+ const client=new sdk.RayonClient(key,{dispatcher:mock});
+ try {await assert.rejects(client.generate(shape()),errorKind("http",422));mock.assertNoPendingInterceptors();}
+ finally {await client.close();}
 });
+
 test("stream deadline includes slow response body and closes stream", async () => {
   setGlobalDispatcher(previous);
   let closed = false;
