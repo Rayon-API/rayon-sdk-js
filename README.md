@@ -21,7 +21,7 @@ Deploy the compatible server before migrating clients.
 Requires Node.js 20.18.1+. ESM, CommonJS and TypeScript are included.
 
 ```sh
-npm install rayon-sdk-js@^3.0.0-rc.1
+npm install rayon-sdk-js@^3.0.0-rc.2
 ```
 
 ## Generate
@@ -59,6 +59,9 @@ scripts must go through preparation. Unsupported, expired or unprepared inputs
 return an explicit error. Generation does not prepare material or retry automatically.
 
 ## Custom material requires preparation
+
+Preparation can take several minutes. Wait helpers return as soon as ready, with a
+30-minute default limit. Timeouts and cancellation leave the job available to resume.
 
 ```typescript
 const ready = await client.prepareAndWait(explicitShape);
