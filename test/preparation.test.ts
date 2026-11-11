@@ -87,3 +87,15 @@ test('transient HTTP408 retries the status read',async()=>{
  mock.get('https://api.rayonapi.com').intercept({path:path+'?wait=10',method:'GET'}).reply(200,frame('ready'));
  assert.equal((await client.waitUntilReady(id)).state,'ready');
 });
+
+test('default preparation wait remains resumable beyond one minute',async t=>{
+ let clock=1000;
+ t.mock.method(performance,'now',()=>clock);
+ mock.get('https://api.rayonapi.com').intercept({path:'/v1/materials/prepare',method:'POST'}).reply(202,frame('queued'));
+ mock.get('https://api.rayonapi.com').intercept({path:path+'?wait=10',method:'GET'}).reply(()=>{
+  clock+=61_000;
+  return {statusCode:200,data:frame('learning')};
+ });
+ mock.get('https://api.rayonapi.com').intercept({path:path+'?wait=10',method:'GET'}).reply(200,frame('ready'));
+ assert.equal((await client.prepareAndWait(shape)).state,'ready');
+});

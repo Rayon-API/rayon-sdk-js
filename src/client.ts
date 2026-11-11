@@ -163,7 +163,7 @@ export class RayonClient {
         (options.waitTimeoutMs !== undefined && (!Number.isSafeInteger(options.waitTimeoutMs) ||
           options.waitTimeoutMs <= 0 || options.waitTimeoutMs > 2147483647)))
       throw new RayonError("validation");
-    return options.waitTimeoutMs ?? 60000;
+    return options.waitTimeoutMs ?? 30 * 60_000;
   }
   async #preparationPause(delay: number, deadline: number, signal?: AbortSignal): Promise<void> {
     if (signal?.aborted) throw new RayonError("aborted");
