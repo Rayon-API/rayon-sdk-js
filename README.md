@@ -15,13 +15,13 @@ the target request.
 
 ## Install
 
-Release candidate for the preparation-required server contract.
+Custom material must be prepared before generation.
 Deploy the compatible server before migrating clients.
 
 Requires Node.js 20.18.1+. ESM, CommonJS and TypeScript are included.
 
 ```sh
-npm install rayon-sdk-js@^3.0.0-rc.2
+npm install rayon-sdk-js@^3.0.0
 ```
 
 ## Generate

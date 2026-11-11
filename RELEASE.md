@@ -54,7 +54,7 @@ After building, run `node scripts/check-error-parity.mjs /path/to/rayon-sdk-py`
 
 ## Managed-material release gate
 
-Candidate: 3.0.0-rc.2. Verify managed header generation, required custom preparation and ready references,
+Release: 3.0.0. Verify managed header generation, required custom preparation and ready references,
 materialless-preparation rejection, safe fallback metadata and all existing
 preparation/cancellation tests. Check package contents and a clean consumer.
 Publish only after the maintainer approves the API contract and release report.
