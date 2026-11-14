@@ -95,7 +95,9 @@ export class RayonClient {
     if (options.signal?.aborted) throw new RayonError("aborted");
     const body = validateShape(shape);
     const [value, metadata] = await this.#send("POST", "/v1/shape", body, options);
-    if (!isRecord(value) || (value.path != null && value.path !== "native") || value.fallback_reason != null)
+    if (!isRecord(value) || !(
+        ((value.path == null || value.path === "native") && value.fallback_reason == null) ||
+        (value.path === "isolated" && value.fallback_reason === "material_preparing")))
       throw new RayonError("invalid_response", metadata);
     return parseResult(value, metadata, this.#apiKey, body.mode ?? "header");
   }
@@ -212,6 +214,7 @@ export class RayonClient {
         method,
         headers: {
           authorization: `Bearer ${this.#apiKey}`,
+          ...(path === "/v1/shape" ? {"x-rayon-capabilities": "managed-fallback-v1"} : {}),
           ...(idempotencyKey ? {"idempotency-key": idempotencyKey} : {}),
           ...(body ? { "content-type": "application/json" } : {}),
         },
